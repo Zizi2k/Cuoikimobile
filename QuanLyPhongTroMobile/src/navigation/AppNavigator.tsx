@@ -1,5 +1,5 @@
 import React, { useEffect } from "react";
-import { Text } from "react-native";
+import { LegacyHeader } from "../views/components/LegacyHeader";
 import { NavigationContainer } from "@react-navigation/native";
 import { createNativeStackNavigator } from "@react-navigation/native-stack";
 import { createBottomTabNavigator } from "@react-navigation/bottom-tabs";
@@ -27,24 +27,16 @@ function MainTabs() {
   const session = useSession();
   return (
     <Tab.Navigator
-      screenOptions={({ route }) => ({
-        headerShown: false,
-        tabBarActiveTintColor: "#176b77",
-        tabBarIcon: ({ color }) => (
-          <Text style={{ color, fontSize: 12, fontWeight: "700" }}>
-            {
-              {
-                Home: "TQ",
-                Rooms: "P",
-                Invoices: "HĐ",
-                Incidents: "SC",
-                Notifications: "TB",
-                Settings: "TK",
-              }[route.name]
-            }
-          </Text>
+      tabBar={() => null}
+      screenOptions={{
+        headerShown: true,
+        header: ({ navigation, route }) => (
+          <LegacyHeader
+            current={route.name}
+            open={(screen) => navigation.navigate(screen)}
+          />
         ),
-      })}
+      }}
     >
       <Tab.Screen
         name="Home"
@@ -105,8 +97,8 @@ export default function AppNavigator() {
       >
         <Stack.Navigator
           screenOptions={{
-            headerTintColor: "#17344b",
-            headerStyle: { backgroundColor: "#fff" },
+            headerTintColor: "#FFFFFF",
+            headerStyle: { backgroundColor: "#0F172A" },
           }}
         >
           {session.token ? (
@@ -114,7 +106,7 @@ export default function AppNavigator() {
               <Stack.Screen
                 name="Main"
                 component={MainTabs}
-                options={{ title: "Quản lý phòng trọ" }}
+                options={{ headerShown: false }}
               />
               <Stack.Screen
                 name="InvoiceDetail"

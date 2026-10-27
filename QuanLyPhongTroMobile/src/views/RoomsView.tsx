@@ -1,10 +1,9 @@
 import React, { useState } from "react";
-import { Alert, FlatList, Modal, View } from "react-native";
+import { Alert, FlatList, Modal, View, Text } from "react-native";
 import { useRoomsModel } from "../viewmodels/useScreenModels";
 import { Room } from "../models/types";
 import {
   Page,
-  Card,
   Title,
   Info,
   Field,
@@ -15,6 +14,7 @@ import {
   money,
   labels,
 } from "./components/ui";
+import { roomStyles as old } from "./components/legacyStyles";
 export default function RoomsView() {
   const vm = useRoomsModel();
   const [editing, setEditing] = useState<Room | null | undefined>(undefined);
@@ -59,7 +59,29 @@ export default function RoomsView() {
         }}
         ListHeaderComponent={
           <>
-            <Title>Phòng trọ ({vm.stats.total})</Title>
+            <View style={old.statsRow}>
+              {[
+                { value: vm.stats.total, label: "Tổng số", color: "#0F172A" },
+                {
+                  value: vm.stats.rented,
+                  label: "Đang thuê",
+                  color: "#16A34A",
+                },
+                { value: vm.stats.empty, label: "Còn trống", color: "#2563EB" },
+                {
+                  value: vm.stats.maintenance,
+                  label: "Bảo trì",
+                  color: "#EA580C",
+                },
+              ].map((stat) => (
+                <View key={stat.label} style={old.statBox}>
+                  <Text style={[old.statVal, { color: stat.color }]}>
+                    {stat.value}
+                  </Text>
+                  <Text style={old.statLabel}>{stat.label}</Text>
+                </View>
+              ))}
+            </View>
             <Button title="Thêm phòng" onPress={() => open(null)} />
             <Choices
               values={["all", "empty", "rented", "maintenance"]}
@@ -77,16 +99,44 @@ export default function RoomsView() {
         }
         ListEmptyComponent={<State empty={!vm.error} loading={false} />}
         renderItem={({ item }) => (
-          <Card>
-            <Title>{item.room_number}</Title>
-            <Info>
-              ID {item.id} · Khu {item.area_id} · {labels[item.status]} ·{" "}
-              {item.area_size} m²
-            </Info>
-            <Info>
-              {money(item.price)}/tháng ·{" "}
-              {item.current_tenant_name || "Chưa có khách thuê"}
-            </Info>
+          <View style={old.roomCard}>
+            <View style={old.roomHeaderRow}>
+              <Text style={old.roomCode}>
+                🚪 {item.room_number || item.room_code}
+              </Text>
+              <View
+                style={[
+                  old.badge,
+                  item.status === "rented"
+                    ? old.badgeGreen
+                    : item.status === "empty"
+                      ? old.badgeBlue
+                      : old.badgeOrange,
+                ]}
+              >
+                <Text style={old.badgeText}>{labels[item.status]}</Text>
+              </View>
+            </View>
+            <Text style={old.cardMuted}>
+              {item.area_name || `Khu #${item.area_id}`} · {item.area_size} m² ·{" "}
+              {item.room_code}
+            </Text>
+            <Text style={old.priceHighlight}>
+              {money(item.price)} <Text style={old.priceUnit}>/ tháng</Text>
+            </Text>
+            <View style={old.divider} />
+            {item.current_tenant_name ? (
+              <View style={old.tenantInfoBox}>
+                <Text style={old.tenantName}>
+                  👤 Khách thuê: {item.current_tenant_name}
+                </Text>
+                <Text style={old.tenantPhone}>{item.current_tenant_phone}</Text>
+              </View>
+            ) : (
+              <Text style={old.emptyTenantNote}>
+                Chưa có người thuê (Sẵn sàng nhận phòng)
+              </Text>
+            )}
             <Button title="Sửa phòng" onPress={() => open(item)} />
             <Button
               title="Xóa phòng"
@@ -105,7 +155,7 @@ export default function RoomsView() {
                 ])
               }
             />
-          </Card>
+          </View>
         )}
       />
       <Modal

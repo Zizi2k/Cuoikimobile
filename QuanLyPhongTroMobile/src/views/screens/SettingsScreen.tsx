@@ -14,7 +14,7 @@ export default function SettingsScreen() {
   const [base, setBase] = useState(session.apiBase);
   return (
     <Page>
-      <Title>Tài khoản và kết nối</Title>
+      <Title>⚙️ Tiện ích và cài đặt</Title>
       <Card>
         <Info>{session.user?.fullname}</Info>
         <Info>
