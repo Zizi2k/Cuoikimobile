@@ -11,6 +11,11 @@ import {
 export const money = (value: unknown) =>
   Number(value || 0).toLocaleString("vi-VN") + " đ";
 export const labels: Record<string, string> = {
+  all: "Tất cả",
+  low: "Thấp",
+  medium: "Bình thường",
+  high: "Cao",
+  urgent: "Khẩn cấp 🚨",
   empty: "Còn trống",
   rented: "Đang thuê",
   maintenance: "Bảo trì",
@@ -108,7 +113,7 @@ export function State({
 }) {
   return (
     <View>
-      {loading && <ActivityIndicator size="large" color="#176b77" />}
+      {loading && <ActivityIndicator size="large" color="#2563EB" />}
       {!!error && (
         <Text accessibilityRole="alert" style={ui.error}>
           {error}
@@ -136,7 +141,7 @@ export function Choices({
           onPress={() => onChange(item)}
           style={[ui.chip, value === item && ui.chipSelected]}
         >
-          <Text style={{ color: value === item ? "#fff" : "#25364a" }}>
+          <Text style={{ color: value === item ? "#fff" : "#334155" }}>
             {labels[item] || item}
           </Text>
         </Pressable>
@@ -146,10 +151,10 @@ export function Choices({
 }
 export const ui = StyleSheet.create({
   page: {
-    padding: 18,
+    padding: 16,
     paddingBottom: 45,
     gap: 12,
-    backgroundColor: "#f2f6f8",
+    backgroundColor: "#F8FAFC",
     flexGrow: 1,
   },
   card: {
@@ -158,25 +163,25 @@ export const ui = StyleSheet.create({
     backgroundColor: "#fff",
     gap: 8,
     borderWidth: 1,
-    borderColor: "#dce5eb",
+    borderColor: "#E2E8F0",
   },
-  title: { fontSize: 23, fontWeight: "700", color: "#17344b", marginBottom: 8 },
-  info: { fontSize: 14, lineHeight: 22, color: "#536578" },
-  label: { fontSize: 14, color: "#25364a", marginBottom: 5, fontWeight: "600" },
+  title: { fontSize: 16, fontWeight: "700", color: "#0F172A", marginBottom: 8 },
+  info: { fontSize: 14, lineHeight: 22, color: "#64748B" },
+  label: { fontSize: 14, color: "#334155", marginBottom: 5, fontWeight: "600" },
   field: { marginVertical: 5 },
   input: {
     borderWidth: 1,
-    borderColor: "#c6d4dd",
-    borderRadius: 9,
+    borderColor: "#CBD5E1",
+    borderRadius: 12,
     padding: 12,
-    backgroundColor: "#fff",
-    fontSize: 16,
-    color: "#18354a",
+    backgroundColor: "#F8FAFC",
+    fontSize: 14,
+    color: "#0F172A",
   },
   button: {
-    backgroundColor: "#176b77",
+    backgroundColor: "#2563EB",
     padding: 13,
-    borderRadius: 9,
+    borderRadius: 12,
     alignItems: "center",
     marginVertical: 4,
   },
@@ -189,10 +194,10 @@ export const ui = StyleSheet.create({
     lineHeight: 20,
   },
   row: { flexDirection: "row", flexWrap: "wrap", gap: 7 },
-  chip: { padding: 10, borderRadius: 8, backgroundColor: "#e4edf2" },
-  chipSelected: { backgroundColor: "#176b77" },
-  itemTitle: { fontSize: 17, fontWeight: "700", color: "#17344b" },
-  list: { padding: 18, gap: 12, paddingBottom: 36 },
-  modal: { flex: 1, backgroundColor: "#f2f6f8" },
-  shell: { flex: 1, backgroundColor: "#f2f6f8" },
+  chip: { padding: 10, borderRadius: 8, backgroundColor: "#F1F5F9" },
+  chipSelected: { backgroundColor: "#2563EB" },
+  itemTitle: { fontSize: 17, fontWeight: "700", color: "#0F172A" },
+  list: { padding: 16, gap: 12, paddingBottom: 36 },
+  modal: { flex: 1, backgroundColor: "#F8FAFC" },
+  shell: { flex: 1, backgroundColor: "#F8FAFC" },
 });
