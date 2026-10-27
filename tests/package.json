@@ -1,0 +1,6 @@
+{
+  "name":"cuoikimobile-ui-verification",
+  "private":true,
+  "scripts":{"smoke":"node ui_smoke.cjs"},
+  "devDependencies":{"playwright":"^1.61.0"}
+}

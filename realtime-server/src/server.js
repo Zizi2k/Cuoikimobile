@@ -2,6 +2,7 @@ const http = require('http');
 const express = require('express');
 const { Server } = require('socket.io');
 const cors = require('cors');
+const crypto = require('crypto');
 const config = require('./config');
 const { authMiddleware } = require('./auth');
 const { registerSocketHandlers } = require('./sockets');
@@ -35,7 +36,9 @@ app.post('/api/emit', (req, res) => {
   const expected = config.REALTIME_INTERNAL_SECRET;
 
   const cleanSecret = (secret || '').replace(/^Bearer\s+/i, '').trim();
-  if (cleanSecret !== expected) {
+  const provided = Buffer.from(cleanSecret);
+  const known = Buffer.from(expected);
+  if (provided.length !== known.length || !crypto.timingSafeEqual(provided, known)) {
     return res.status(403).json({ success: false, message: 'Forbidden: Invalid internal secret' });
   }
 

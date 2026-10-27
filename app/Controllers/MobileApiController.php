@@ -4,6 +4,7 @@ namespace App\Controllers;
 use App\Helpers\Database;
 use App\Helpers\PushNotification;
 use App\Helpers\RealtimeEmitter;
+use App\Helpers\NotificationInbox;
 use PDO;
 use Throwable;
 
@@ -14,12 +15,13 @@ use Throwable;
  */
 class MobileApiController
 {
-    private static function apiSecret(): string
+    private function apiSecret(): string
     {
         $secret = getenv('QLPT_API_SECRET');
-        return ($secret !== false && strlen($secret) >= 32)
-            ? $secret
-            : 'QLPT-ExpoGo-2026-LOCAL-DEMO-SECRET-CHANGE-ME';
+        if ($secret === false || strlen($secret) < 32) {
+            $this->respond(['success' => false, 'message' => 'Máy chủ chưa cấu hình QLPT_API_SECRET (tối thiểu 32 ký tự).'], 503);
+        }
+        return $secret;
     }
 
     private function respond(array $data, int $status = 200): void
@@ -43,7 +45,7 @@ class MobileApiController
     private function makeToken(int $userId, string $role = 'tenant'): string
     {
         $payload = $userId . '.' . $role . '.' . (time() + 86400 * 7);
-        return rtrim(strtr(base64_encode($payload), '+/', '-_'), '=') . '.' . hash_hmac('sha256', $payload, self::apiSecret());
+        return rtrim(strtr(base64_encode($payload), '+/', '-_'), '=') . '.' . hash_hmac('sha256', $payload, $this->apiSecret());
     }
 
     private function authorize(?string $requiredRole = null): array
@@ -78,15 +80,16 @@ class MobileApiController
 
 
         $payload = base64_decode(strtr($parts[0], '-_', '+/'), true);
-        if (!$payload || !hash_equals(hash_hmac('sha256', $payload, self::apiSecret()), $parts[1])) {
+        if (!$payload || !hash_equals(hash_hmac('sha256', $payload, $this->apiSecret()), $parts[1])) {
             $this->respond(['success' => false, 'message' => 'Token không hợp lệ.'], 401);
         }
 
-        $bits = explode('.', $payload);
-        $userId = (int)$bits[0];
-        $expiresAt = count($bits) === 3 ? (int)$bits[2] : (int)$bits[1];
-
-        if ($expiresAt < time()) {
+        if (!preg_match('/^([1-9][0-9]*)\.(admin|tenant)\.([0-9]+)$/D', $payload, $bits)) {
+            $this->respond(['success' => false, 'message' => 'Token không hợp lệ.'], 401);
+        }
+        $userId = (int)$bits[1];
+        $expiresAt = (int)$bits[3];
+        if ($expiresAt <= time()) {
             $this->respond(['success' => false, 'message' => 'Phiên đăng nhập đã hết hạn.'], 401);
         }
 
@@ -99,6 +102,10 @@ class MobileApiController
             $this->respond(['success' => false, 'message' => 'Tài khoản không tồn tại hoặc đã bị khóa.'], 401);
         }
 
+        if ($user['role'] !== $bits[2]) {
+            $this->respond(['success' => false, 'message' => 'Quyền tài khoản đã thay đổi. Vui lòng đăng nhập lại.'], 401);
+        }
+
         if ($requiredRole && $user['role'] !== $requiredRole) {
             $this->respond(['success' => false, 'message' => 'Bạn không có quyền thực hiện thao tác này.'], 403);
         }
@@ -108,16 +115,6 @@ class MobileApiController
             $stmt = $pdo->prepare('SELECT id FROM tenants WHERE user_id = ? LIMIT 1');
             $stmt->execute([$user['id']]);
             $tenantId = $stmt->fetchColumn();
-
-            // Auto-link by phone if not linked
-            if (!$tenantId && !empty($user['phone'])) {
-                $stmt = $pdo->prepare('SELECT id FROM tenants WHERE phone = ? LIMIT 1');
-                $stmt->execute([$user['phone']]);
-                $tenantId = $stmt->fetchColumn();
-                if ($tenantId) {
-                    $pdo->prepare('UPDATE tenants SET user_id = ? WHERE id = ?')->execute([$user['id'], $tenantId]);
-                }
-            }
 
             $user['tenant_id'] = $tenantId ? (int)$tenantId : null;
         }
@@ -149,30 +146,7 @@ class MobileApiController
     /** Demo tenant accounts */
     public function demoTenants(): void
     {
-        try {
-            $pdo = Database::getConnection();
-            $stmt = $pdo->query(
-                "SELECT t.id, t.fullname, t.phone, t.id_card,
-                        COALESCE(u.username, '') AS username,
-                        COALESCE(r.room_number, r.room_code, 'Chưa có phòng') AS room_name,
-                        COALESCE(a.name, '') AS area_name
-                 FROM tenants t
-                 LEFT JOIN users u ON u.id = t.user_id
-                 LEFT JOIN contracts c ON c.tenant_id = t.id AND c.status = 'active'
-                 LEFT JOIN rooms r ON r.id = c.room_id
-                 LEFT JOIN rental_areas a ON a.id = r.area_id
-                 ORDER BY t.id ASC
-                 LIMIT 5"
-            );
-            $list = $stmt->fetchAll(PDO::FETCH_ASSOC);
-            $this->respond([
-                'success' => true,
-                'data' => $list,
-                'default_password' => 'NhaTro@2026'
-            ]);
-        } catch (Throwable $e) {
-            $this->respond(['success' => false, 'message' => $e->getMessage()], 500);
-        }
+        $this->respond(['success' => true, 'data' => []]);
     }
 
     /**
@@ -184,23 +158,23 @@ class MobileApiController
             $data = $this->input();
             $login = trim((string)($data['username'] ?? $data['phone'] ?? $data['email'] ?? ''));
             $password = (string)($data['password'] ?? '');
-            $isQuickLogin = !empty($data['quick_login']);
 
-            if ($login === '' || (!$isQuickLogin && $password === '')) {
+            if ($login === '' || $password === '') {
                 $this->respond([
                     'success' => false,
                     'message' => 'Vui lòng nhập tài khoản (hoặc số điện thoại) và mật khẩu.'
                 ], 422);
             }
 
-            $cleanPhone = preg_replace('/[^0-9]/', '', $login);
+            $this->apiSecret(); // Fail before any authentication work if signing is unconfigured.
+            $cleanPhone = preg_match('/^[+0-9 ().-]+$/D', $login) ? preg_replace('/[^0-9]/', '', $login) : '';
             $pdo = Database::getConnection();
 
             // 1. Search in users table
             $stmt = $pdo->prepare(
                 "SELECT u.id, u.username, u.password, u.role, u.fullname,
                         u.email, u.phone, u.status,
-                        t.id AS tenant_id, t.id_card AS tenant_id_card, t.fullname AS tenant_fullname
+                        t.id AS tenant_id, t.fullname AS tenant_fullname
                  FROM users u
                  LEFT JOIN tenants t ON t.user_id = u.id
                  WHERE u.username = ?
@@ -223,73 +197,13 @@ class MobileApiController
             ]);
             $u = $stmt->fetch(PDO::FETCH_ASSOC);
 
-            // 2. If not found in users but exists in tenants (tenant created on web without explicit user account)
-            if (!$u && strlen($cleanPhone) >= 9) {
-                $stmt = $pdo->prepare("SELECT id, fullname, phone, email, id_card, user_id FROM tenants WHERE phone = ? LIMIT 1");
-                $stmt->execute([$cleanPhone]);
-                $tenant = $stmt->fetch(PDO::FETCH_ASSOC);
-
-                if ($tenant) {
-                    $validPass = $isQuickLogin
-                        || $password === 'NhaTro@2026'
-                        || $password === '123456'
-                        || (!empty($tenant['id_card']) && ($password === $tenant['id_card'] || substr($tenant['id_card'], -6) === $password))
-                        || strlen($password) >= 6;
-
-                    if ($validPass) {
-                        $newUsername = 'kh_' . $cleanPhone;
-                        $passHash = password_hash($password ?: 'NhaTro@2026', PASSWORD_DEFAULT);
-                        $insertUser = $pdo->prepare("INSERT INTO users (username, password, role, fullname, phone, email, status) VALUES (?, ?, 'tenant', ?, ?, ?, 1)");
-                        $insertUser->execute([$newUsername, $passHash, $tenant['fullname'], $tenant['phone'], $tenant['email']]);
-                        $newUserId = (int)$pdo->lastInsertId();
-
-                        $pdo->prepare("UPDATE tenants SET user_id = ? WHERE id = ?")->execute([$newUserId, $tenant['id']]);
-
-                        $u = [
-                            'id' => $newUserId,
-                            'username' => $newUsername,
-                            'role' => 'tenant',
-                            'fullname' => $tenant['fullname'],
-                            'email' => $tenant['email'],
-                            'phone' => $tenant['phone'],
-                            'status' => 1,
-                            'tenant_id' => (int)$tenant['id']
-                        ];
-                    }
-                }
+            // Authentication never provisions accounts or accepts demo/identity-card passwords.
+            if (!$u || !password_verify($password, (string)$u['password'])) {
+                $this->respond(['success' => false, 'message' => 'Thông tin đăng nhập không chính xác.'], 401);
             }
-
-            if (!$u) {
-                $this->respond([
-                    'success' => false,
-                    'message' => 'Không tìm thấy tài khoản hoặc số điện thoại.'
-                ], 401);
-            }
-
-            // 3. Password verification
-            if (isset($u['password'])) {
-                $passwordValid = false;
-                if ($isQuickLogin) {
-                    $passwordValid = true;
-                } elseif (password_verify($password, $u['password']) || $password === $u['password']) {
-                    $passwordValid = true;
-                    // Migrate plain passwords to bcrypt securely
-                    if ($password === $u['password']) {
-                        $newHash = password_hash($password, PASSWORD_DEFAULT);
-                        $pdo->prepare('UPDATE users SET password = ? WHERE id = ?')->execute([$newHash, $u['id']]);
-                    }
-                } elseif (!empty($u['tenant_id_card']) && ($password === $u['tenant_id_card'] || substr($u['tenant_id_card'], -6) === $password)) {
-                    $passwordValid = true;
-                } elseif ($password === 'NhaTro@2026' || $password === '123456' || $password === 'admin123' || $password === 'MatKhauManh@2026!') {
-                    $passwordValid = true;
-                }
-
-                if (!$passwordValid) {
-                    $this->respond([
-                        'success' => false,
-                        'message' => 'Mật khẩu không chính xác.'
-                    ], 401);
-                }
+            if (password_needs_rehash($u['password'], PASSWORD_DEFAULT)) {
+                $pdo->prepare('UPDATE users SET password = ? WHERE id = ?')
+                    ->execute([password_hash($password, PASSWORD_DEFAULT), $u['id']]);
             }
 
             if ((int)$u['status'] !== 1) {
@@ -300,7 +214,7 @@ class MobileApiController
             }
 
             // Clean up private attributes
-            unset($u['password'], $u['tenant_id_card']);
+            unset($u['password']);
 
             $token = $this->makeToken((int)$u['id'], $u['role']);
 
@@ -314,7 +228,7 @@ class MobileApiController
             error_log('Mobile login error: ' . $e->getMessage());
             $this->respond([
                 'success' => false,
-                'message' => 'Lỗi máy chủ khi đăng nhập: ' . $e->getMessage()
+                'message' => 'Không thể đăng nhập lúc này. Vui lòng thử lại sau.'
             ], 500);
         }
     }
@@ -345,13 +259,20 @@ class MobileApiController
                 $this->respond(['success' => false, 'message' => 'Mật khẩu phải có ít nhất 6 ký tự.'], 422);
             }
 
+            $this->apiSecret();
             $pdo = Database::getConnection();
 
-            // Check if user already exists
+            // Existing tenant profiles require administrator verification, never phone-only claiming.
             $stmt = $pdo->prepare("SELECT id FROM users WHERE phone = ? OR username = ? LIMIT 1");
             $stmt->execute([$cleanPhone, $cleanPhone]);
             if ($stmt->fetch()) {
                 $this->respond(['success' => false, 'message' => 'Số điện thoại này đã được đăng ký tài khoản.'], 409);
+            }
+
+            $stmt = $pdo->prepare('SELECT id FROM tenants WHERE phone = ? LIMIT 1');
+            $stmt->execute([$cleanPhone]);
+            if ($stmt->fetchColumn()) {
+                $this->respond(['success' => false, 'message' => 'Số điện thoại đã có hồ sơ. Vui lòng liên hệ chủ trọ để được cấp tài khoản.'], 409);
             }
 
             $pdo->beginTransaction();
@@ -366,22 +287,12 @@ class MobileApiController
             $stmtUser->execute([$username, $passHash, $fullname, $cleanPhone, $email]);
             $userId = (int)$pdo->lastInsertId();
 
-            // Check if tenant record exists with same phone
-            $stmtTenant = $pdo->prepare("SELECT id FROM tenants WHERE phone = ? LIMIT 1");
-            $stmtTenant->execute([$cleanPhone]);
-            $tenantId = $stmtTenant->fetchColumn();
-
-            if ($tenantId) {
-                $pdo->prepare("UPDATE tenants SET user_id = ?, fullname = ?, email = COALESCE(email, ?) WHERE id = ?")
-                    ->execute([$userId, $fullname, $email, $tenantId]);
-            } else {
-                $stmtInsertTenant = $pdo->prepare("
-                    INSERT INTO tenants (user_id, fullname, phone, email, id_card, created_at)
-                    VALUES (?, ?, ?, ?, ?, NOW())
-                ");
-                $stmtInsertTenant->execute([$userId, $fullname, $cleanPhone, $email, $idCard]);
-                $tenantId = (int)$pdo->lastInsertId();
-            }
+            $stmtInsertTenant = $pdo->prepare("
+                INSERT INTO tenants (user_id, fullname, phone, email, id_card, created_at)
+                VALUES (?, ?, ?, ?, ?, NOW())
+            ");
+            $stmtInsertTenant->execute([$userId, $fullname, $cleanPhone, $email, $idCard]);
+            $tenantId = (int)$pdo->lastInsertId();
 
             $pdo->commit();
 
@@ -406,7 +317,7 @@ class MobileApiController
             if (isset($pdo) && $pdo->inTransaction()) {
                 $pdo->rollBack();
             }
-            $this->respond(['success' => false, 'message' => 'Lỗi đăng ký: ' . $e->getMessage()], 500);
+            $this->respond(['success' => false, 'message' => 'Không thể đăng ký lúc này. Vui lòng kiểm tra thông tin hoặc liên hệ chủ trọ.'], 500);
         }
     }
 
@@ -465,8 +376,7 @@ class MobileApiController
             $recentMaintenance = $stmt->fetchAll(PDO::FETCH_ASSOC);
 
             // Recent notifications
-            $stmt = $pdo->query("SELECT id, title, content, type, is_read, created_at FROM notifications ORDER BY id DESC LIMIT 5");
-            $notifications = $stmt->fetchAll(PDO::FETCH_ASSOC);
+            $notifications = (new NotificationInbox($pdo))->items($u, 5);
 
             $this->respond([
                 'success' => true,
@@ -515,17 +425,7 @@ class MobileApiController
             $invoices = $stmt->fetchAll(PDO::FETCH_ASSOC);
         }
 
-        $stmt = $pdo->prepare("
-            SELECT id, title, content, type, is_read, reference_type, reference_id, created_at
-            FROM notifications
-            WHERE (target_tenant_id IS NULL AND target_user_id IS NULL)
-               OR target_tenant_id = ?
-               OR target_user_id = ?
-            ORDER BY id DESC
-            LIMIT 5
-        ");
-        $stmt->execute([$tid, $u['id']]);
-        $notifications = $stmt->fetchAll(PDO::FETCH_ASSOC);
+        $notifications = (new NotificationInbox($pdo))->items($u, 5);
 
         $requests = [];
         if ($tid) {
@@ -587,7 +487,7 @@ class MobileApiController
 
         if ($u['role'] === 'admin') {
             $stmt = $pdo->query("
-                SELECT r.id, r.room_code, r.room_number, r.area_size, r.price, r.deposit, r.max_occupants, r.status, r.description,
+                SELECT r.id, r.area_id, r.room_code, r.room_number, r.area_size, r.price, r.deposit, r.max_occupants, r.status, r.description,
                        a.name AS area_name, a.address AS area_address,
                        t.fullname AS current_tenant_name, t.phone AS current_tenant_phone, c.id AS contract_id
                 FROM rooms r
@@ -607,7 +507,7 @@ class MobileApiController
         }
 
         $stmt = $pdo->prepare("
-            SELECT r.id, r.room_code, r.room_number, r.area_size, r.price, r.deposit, r.status, r.description,
+            SELECT r.id, r.area_id, r.room_code, r.room_number, r.area_size, r.price, r.deposit, r.status, r.description,
                    a.name AS area_name, a.address AS area_address,
                    c.contract_code, c.start_date, c.end_date
             FROM contracts c
@@ -711,12 +611,21 @@ class MobileApiController
         }
 
         // Check duplicate
+        if ($contract['status'] !== 'active') $this->respond(['success'=>false,'message'=>'Hợp đồng không còn hiệu lực.'],422);
         $stmtDup = $pdo->prepare("SELECT id FROM invoices WHERE contract_id = ? AND billing_month = ? LIMIT 1");
         $stmtDup->execute([$contractId, $billingMonth]);
         if ($stmtDup->fetch()) {
             $this->respond(['success' => false, 'message' => "Hóa đơn kỳ {$billingMonth} của phòng này đã tồn tại."], 409);
         }
 
+        if (!preg_match('/^\d{4}-(0[1-9]|1[0-2])$/D', $billingMonth) || !preg_match('/^\d{4}-\d{2}-\d{2}$/D', $dueDate)) {
+            $this->respond(['success'=>false,'message'=>'Kỳ hoặc hạn thanh toán không hợp lệ.'],422);
+        }
+        foreach (['room_price','electricity_usage','electricity_rate','water_usage','water_rate','service_amount','other_fees','discount'] as $key) {
+            if (isset($data[$key]) && (!is_numeric($data[$key]) || !is_finite((float)$data[$key]) || (float)$data[$key]<0)) {
+                $this->respond(['success'=>false,'message'=>'Các khoản tiền/chỉ số phải là số không âm.'],422);
+            }
+        }
         $roomPrice = (float)($data['room_price'] ?? $contract['rent_price']);
         $elecUsage = (float)($data['electricity_usage'] ?? 0);
         $elecRate = (float)($data['electricity_rate'] ?? 3500);
@@ -731,11 +640,7 @@ class MobileApiController
         $discount = (float)($data['discount'] ?? 0);
         $totalAmount = max(0, $roomPrice + $elecAmount + $waterAmount + $serviceAmount + $otherFees - $discount);
 
-        $prefix = 'HDN-' . str_replace('-', '', $billingMonth) . '-';
-        $stmtCount = $pdo->prepare("SELECT COUNT(*) FROM invoices WHERE billing_month = ?");
-        $stmtCount->execute([$billingMonth]);
-        $seq = (int)$stmtCount->fetchColumn() + 1;
-        $invCode = $prefix . str_pad((string)$seq, 3, '0', STR_PAD_LEFT);
+        $invCode = 'HDN-' . str_replace('-', '', $billingMonth) . '-' . bin2hex(random_bytes(4));
 
         $pdo->beginTransaction();
         try {
@@ -818,15 +723,16 @@ class MobileApiController
 
         $invoiceId = (int)($data['invoice_id'] ?? 0);
         $amount = (float)($data['amount'] ?? 0);
-        $method = in_array(($data['payment_method'] ?? 'cash'), ['cash', 'bank_transfer'], true) ? $data['payment_method'] : 'cash';
+        $method = in_array(($data['payment_method'] ?? 'cash'), ['cash', 'bank_transfer'], true) ? ($data['payment_method'] ?? 'cash') : 'cash';
         $ref = trim((string)($data['transaction_ref'] ?? ''));
         $notes = trim((string)($data['notes'] ?? ''));
 
-        if (!$invoiceId || $amount <= 0) {
+        if (!$invoiceId || !is_numeric($data['amount'] ?? null) || !is_finite($amount) || $amount <= 0) {
             $this->respond(['success' => false, 'message' => 'Vui lòng cung cấp mã hóa đơn và số tiền thanh toán hợp lệ.'], 422);
         }
 
-        $stmt = $pdo->prepare("SELECT * FROM invoices WHERE id = ? LIMIT 1");
+        $pdo->beginTransaction();
+        $stmt = $pdo->prepare("SELECT * FROM invoices WHERE id = ? LIMIT 1 FOR UPDATE");
         $stmt->execute([$invoiceId]);
         $invoice = $stmt->fetch(PDO::FETCH_ASSOC);
 
@@ -834,6 +740,10 @@ class MobileApiController
             $this->respond(['success' => false, 'message' => 'Hóa đơn không tồn tại.'], 404);
         }
 
+        if ($amount > (float)$invoice['remaining_amount']) {
+            $pdo->rollBack();
+            $this->respond(['success'=>false,'message'=>'Số tiền vượt công nợ.'],422);
+        }
         $newPaid = (float)$invoice['paid_amount'] + $amount;
         $total = (float)$invoice['total_amount'];
         $newRemaining = max(0, $total - $newPaid);
@@ -845,9 +755,8 @@ class MobileApiController
             $newStatus = 'partially_paid';
         }
 
-        $pdo->beginTransaction();
         try {
-            $payCode = 'TT-' . date('ymdHis') . '-' . random_int(10, 99);
+            $payCode = 'TT-' . date('ymdHis') . '-' . bin2hex(random_bytes(4));
             $stmtPay = $pdo->prepare("
                 INSERT INTO payments (payment_code, invoice_id, payment_date, amount, payment_method, transaction_ref, notes, created_by, created_at)
                 VALUES (?, ?, NOW(), ?, ?, ?, ?, ?, NOW())
@@ -961,7 +870,7 @@ class MobileApiController
             $this->respond(['success' => false, 'message' => 'Bạn chưa có hợp đồng thuê phòng đang hoạt động.'], 403);
         }
 
-        $priority = in_array(($data['priority'] ?? 'medium'), ['low', 'medium', 'high', 'urgent'], true) ? $data['priority'] : 'medium';
+        $priority = in_array(($data['priority'] ?? 'medium'), ['low', 'medium', 'high', 'urgent'], true) ? ($data['priority'] ?? 'medium') : 'medium';
         $code = 'YC-' . date('ymdHis') . '-' . random_int(10, 99);
 
         $stmt = $pdo->prepare("
@@ -1131,8 +1040,8 @@ class MobileApiController
         $deviceType = trim((string)($data['device_type'] ?? 'mobile'));
         $deviceId = trim((string)($data['device_id'] ?? '')) ?: null;
 
-        if ($token === '') {
-            $this->respond(['success' => false, 'message' => 'Token không được để trống.'], 422);
+        if (!PushNotification::isValidToken($token)) {
+            $this->respond(['success' => false, 'message' => 'Expo push token không hợp lệ.'], 422);
         }
 
         $ok = PushNotification::saveToken($u['id'], $token, $deviceType, $deviceId);
@@ -1153,6 +1062,7 @@ class MobileApiController
      */
     public function removePushToken(): void
     {
+        $u = $this->authorize();
         $data = $this->input();
         $token = trim((string)($data['token'] ?? ''));
 
@@ -1160,7 +1070,7 @@ class MobileApiController
             $this->respond(['success' => true]);
         }
 
-        PushNotification::removeToken($token);
+        PushNotification::removeToken($token, (int)$u['id']);
         $this->respond(['success' => true, 'message' => 'Đã hủy đăng ký token thiết bị.']);
     }
 
@@ -1173,44 +1083,15 @@ class MobileApiController
         $u = $this->authorize();
         $pdo = Database::getConnection();
 
-        $tid = $u['tenant_id'] ?? null;
-        $uid = $u['id'];
-
-        if ($u['role'] === 'admin') {
-            $stmt = $pdo->prepare("
-                SELECT id, title, content, type, is_read, reference_type, reference_id, data_payload, created_at
-                FROM notifications
-                WHERE target_user_id = ? OR (target_tenant_id IS NULL AND target_user_id IS NULL)
-                ORDER BY id DESC
-                LIMIT 50
-            ");
-            $stmt->execute([$uid]);
-        } else {
-            $stmt = $pdo->prepare("
-                SELECT id, title, content, type, is_read, reference_type, reference_id, data_payload, created_at
-                FROM notifications
-                WHERE target_user_id = ? 
-                   OR target_tenant_id = ? 
-                   OR (target_tenant_id IS NULL AND target_user_id IS NULL)
-                ORDER BY id DESC
-                LIMIT 50
-            ");
-            $stmt->execute([$uid, $tid]);
-        }
-
-        $items = $stmt->fetchAll(PDO::FETCH_ASSOC);
-
-        $unreadCount = 0;
+        $inbox = new NotificationInbox($pdo);
+        $items = $inbox->items($u);
         foreach ($items as &$item) {
-            $item['is_read'] = (int)$item['is_read'];
-            if ($item['is_read'] === 0) {
-                $unreadCount++;
-            }
             if (!empty($item['data_payload'])) {
                 $item['data'] = json_decode($item['data_payload'], true);
             }
         }
         unset($item);
+        $unreadCount = $inbox->unreadCount($u);
 
         $this->respond([
             'success'      => true,
@@ -1237,8 +1118,9 @@ class MobileApiController
         }
 
         $pdo = Database::getConnection();
-        $stmt = $pdo->prepare("UPDATE notifications SET is_read = 1 WHERE id = ?");
-        $stmt->execute([$notifId]);
+        if (!(new NotificationInbox($pdo))->markRead($u, $notifId)) {
+            $this->respond(['success' => false, 'message' => 'Không tìm thấy thông báo.'], 404);
+        }
 
         $this->respond(['success' => true, 'message' => 'Đã đánh dấu thông báo là đã đọc.']);
     }
@@ -1251,16 +1133,7 @@ class MobileApiController
     {
         $u = $this->authorize();
         $pdo = Database::getConnection();
-        $tid = $u['tenant_id'] ?? null;
-        $uid = $u['id'];
-
-        if ($u['role'] === 'admin') {
-            $stmt = $pdo->prepare("UPDATE notifications SET is_read = 1 WHERE target_user_id = ? OR (target_tenant_id IS NULL AND target_user_id IS NULL)");
-            $stmt->execute([$uid]);
-        } else {
-            $stmt = $pdo->prepare("UPDATE notifications SET is_read = 1 WHERE target_user_id = ? OR target_tenant_id = ? OR (target_tenant_id IS NULL AND target_user_id IS NULL)");
-            $stmt->execute([$uid, $tid]);
-        }
+        (new NotificationInbox($pdo))->markAllRead($u);
 
         $this->respond(['success' => true, 'message' => 'Đã đánh dấu tất cả thông báo là đã đọc.']);
     }
@@ -1293,26 +1166,7 @@ class MobileApiController
     {
         $u = $this->authorize();
         $pdo = Database::getConnection();
-        $tid = $u['tenant_id'] ?? null;
-        $uid = $u['id'];
-
-        if ($u['role'] === 'admin') {
-            $stmt = $pdo->prepare("
-                SELECT COUNT(*) 
-                FROM notifications 
-                WHERE is_read = 0 AND (target_user_id = ? OR (target_tenant_id IS NULL AND target_user_id IS NULL))
-            ");
-            $stmt->execute([$uid]);
-        } else {
-            $stmt = $pdo->prepare("
-                SELECT COUNT(*) 
-                FROM notifications 
-                WHERE is_read = 0 AND (target_user_id = ? OR target_tenant_id = ? OR (target_tenant_id IS NULL AND target_user_id IS NULL))
-            ");
-            $stmt->execute([$uid, $tid]);
-        }
-
-        $count = (int)$stmt->fetchColumn();
+        $count = (new NotificationInbox($pdo))->unreadCount($u);
         $this->respond(['success' => true, 'unread_count' => $count]);
     }
 
@@ -1357,7 +1211,7 @@ class MobileApiController
         $category = trim((string)($data['category'] ?? ''));
         $isEnabled = !empty($data['is_enabled']) ? 1 : 0;
 
-        if ($category === '') {
+        if (!in_array($category, ['invoice','payment','maintenance','reminder'], true)) {
             $this->respond(['success' => false, 'message' => 'Thiếu danh mục thông báo.'], 422);
         }
 
@@ -1434,18 +1288,27 @@ class MobileApiController
             $this->respond(['success' => false, 'message' => 'Phòng trọ không tồn tại.'], 404);
         }
 
+        $areaId=(int)($data['area_id']??$room['area_id']);
+        $roomCode=trim((string)($data['room_code']??$room['room_code']));
         $roomNumber = trim((string)($data['room_number'] ?? $room['room_number']));
         $price = isset($data['price']) ? (float)$data['price'] : (float)$room['price'];
         $areaSize = isset($data['area_size']) ? (float)$data['area_size'] : (float)$room['area_size'];
         $status = in_array(($data['status'] ?? ''), ['empty', 'rented', 'maintenance'], true) ? $data['status'] : $room['status'];
         $description = isset($data['description']) ? trim((string)$data['description']) : $room['description'];
 
+        if ($roomCode === '' || $areaId<=0 || $roomNumber === '' || !is_finite($price) || $price<=0 || !is_finite($areaSize) || $areaSize<=0) {
+            $this->respond(['success'=>false,'message'=>'Tên, giá hoặc diện tích phòng không hợp lệ.'],422);
+        }
+        $active=$pdo->prepare("SELECT id FROM contracts WHERE room_id=? AND status='active' LIMIT 1");$active->execute([$roomId]);
+        if ($active->fetchColumn() && $status !== 'rented') {
+            $this->respond(['success'=>false,'message'=>'Kết thúc hợp đồng trước khi đổi trạng thái phòng đang thuê.'],409);
+        }
         $stmt = $pdo->prepare("
             UPDATE rooms 
-            SET room_number = ?, price = ?, area_size = ?, status = ?, description = ?, updated_at = NOW()
+            SET area_id = ?, room_code = ?, room_number = ?, price = ?, area_size = ?, status = ?, description = ?, updated_at = NOW()
             WHERE id = ?
         ");
-        $stmt->execute([$roomNumber, $price, $areaSize, $status, $description, $roomId]);
+        $stmt->execute([$areaId, $roomCode, $roomNumber, $price, $areaSize, $status, $description, $roomId]);
 
         $this->respond([
             'success' => true,
@@ -1504,5 +1367,49 @@ class MobileApiController
         $tenants = $stmt->fetchAll(PDO::FETCH_ASSOC);
 
         $this->respond(['success' => true, 'data' => $tenants]);
+    }
+    public function session(): void
+    {
+        $this->respond(['success' => true, 'user' => $this->authorize()]);
+    }
+
+    public function invoiceDetail(int|string $id): void
+    {
+        $u = $this->authorize();
+        $pdo = Database::getConnection();
+        $stmt = $pdo->prepare('SELECT * FROM invoices WHERE id = ?' . ($u['role'] === 'admin' ? '' : ' AND tenant_id = ?'));
+        $stmt->execute($u['role'] === 'admin' ? [(int)$id] : [(int)$id, $u['tenant_id']]);
+        $invoice = $stmt->fetch(PDO::FETCH_ASSOC);
+        if (!$invoice) $this->respond(['success' => false, 'message' => 'Không tìm thấy hóa đơn.'], 404);
+        $stmt = $pdo->prepare('SELECT item_name,quantity,unit,unit_price,amount FROM invoice_details WHERE invoice_id = ?');
+        $stmt->execute([(int)$id]);
+        $invoice['details'] = $stmt->fetchAll(PDO::FETCH_ASSOC);
+        if ((float)$invoice['remaining_amount'] > 0) {
+            $invoice['vietqr_url'] = get_vietqr_url(get_setting('bank_account_number', ''), get_setting('bank_account_name', ''), (float)$invoice['remaining_amount'], $invoice['invoice_code'], get_setting('bank_name', ''));
+        }
+        $this->respond(['success' => true, 'data' => $invoice]);
+    }
+
+    public function maintenanceDetail(int|string $id): void
+    {
+        $u = $this->authorize();
+        $stmt = Database::getConnection()->prepare('SELECT * FROM maintenance_requests WHERE id = ?' . ($u['role'] === 'admin' ? '' : ' AND tenant_id = ?'));
+        $stmt->execute($u['role'] === 'admin' ? [(int)$id] : [(int)$id, $u['tenant_id']]);
+        $record = $stmt->fetch(PDO::FETCH_ASSOC);
+        if (!$record) $this->respond(['success' => false, 'message' => 'Không tìm thấy sự cố.'], 404);
+        $this->respond(['success' => true, 'data' => $record]);
+    }
+
+    public function manage(string $resource, int|string|null $id = null): void
+    {
+        $u = $this->authorize('admin');
+        try {
+            $data = (new \App\Helpers\ManagementService(Database::getConnection()))->execute($resource, $_SERVER['REQUEST_METHOD'], (int)$id, $this->input(), (int)$u['id']);
+            $this->respond(['success' => true, 'data' => $data]);
+        } catch (\InvalidArgumentException $e) {
+            $this->respond(['success' => false, 'message' => $e->getMessage()], 422);
+        } catch (\PDOException $e) {
+            $this->respond(['success' => false, 'message' => 'Dữ liệu trùng hoặc đang được sử dụng. Không thể lưu/xóa.'], 409);
+        }
     }
 }

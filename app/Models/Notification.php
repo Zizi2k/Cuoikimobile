@@ -29,12 +29,12 @@ class Notification extends Model
      */
     public function allForTenant(int $tenantId): array
     {
-        $stmt = $this->db->prepare("
-            SELECT * FROM notifications 
-            WHERE target_tenant_id IS NULL OR target_tenant_id = ?
-            ORDER BY id DESC
-        ");
+        $stmt = $this->db->prepare('SELECT user_id FROM tenants WHERE id = ?');
         $stmt->execute([$tenantId]);
-        return $stmt->fetchAll();
+        $userId = $stmt->fetchColumn();
+        if (!$userId) return [];
+        return (new \App\Helpers\NotificationInbox($this->db))->items([
+            'id' => (int)$userId, 'role' => 'tenant', 'tenant_id' => $tenantId
+        ], 100);
     }
 }

@@ -8,7 +8,7 @@ export interface User {
   fullname: string;
   email?: string;
   phone?: string;
-  role: 'admin' | 'tenant';
+  role: "admin" | "tenant";
   status: number;
   tenant_id?: number | null;
 }
@@ -23,7 +23,7 @@ export interface Room {
   price: number;
   deposit?: number;
   max_occupants?: number;
-  status: 'empty' | 'rented' | 'maintenance';
+  status: "empty" | "rented" | "maintenance";
   description?: string;
   current_tenant_name?: string;
   current_tenant_phone?: string;
@@ -53,7 +53,7 @@ export interface Invoice {
   paid_amount: number;
   remaining_amount: number;
   due_date: string;
-  status: 'unpaid' | 'partially_paid' | 'paid' | 'overdue';
+  status: "unpaid" | "partially_paid" | "paid" | "overdue";
   notes?: string;
   vietqr_url?: string | null;
   created_at?: string;
@@ -82,8 +82,8 @@ export interface MaintenanceRequest {
   tenant_phone?: string;
   title: string;
   description: string;
-  priority: 'low' | 'medium' | 'high' | 'urgent';
-  status: 'pending' | 'in_progress' | 'completed' | 'rejected';
+  priority: "low" | "medium" | "high" | "urgent";
+  status: "pending" | "in_progress" | "completed" | "rejected";
   admin_notes?: string;
   cost?: number;
   created_at?: string;

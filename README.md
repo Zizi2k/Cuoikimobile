@@ -1,9 +1,10 @@
 # QuanLyPhongTro — Hệ thống quản lý nhà trọ
 
-## Ứng dụng khách thuê trên điện thoại (Android & iOS — Expo Go)
+## Bản hoàn thiện bài cuối kỳ
 
-Project có ứng dụng Expo Go trong thư mục `QuanLyPhongTroMobile` hỗ trợ cả Android và iOS; backend dùng PHP + MySQL hiện có. Hướng dẫn cài đặt, cấu hình IP, tạo tài khoản và xử lý lỗi nằm tại `QuanLyPhongTroMobile/README-CHAY-EXPO-GO.md`. Endpoint kiểm tra backend: `public/index.php?route=api/health`.
+Ứng dụng mobile dùng React Navigation + Context + MVVM; backend PHP/MySQL cung cấp REST CRUD; Node.js/Socket.IO cung cấp hai sự kiện nghiệp vụ hai chiều. Push dùng Expo Push Service trong development build.
 
+**Hướng dẫn chính:** [Cài đặt, đối chiếu tiêu chí, kiến trúc và kịch bản demo](docs/11_HOAN_THIEN_TIEU_CHI.md). Android Expo Go không hỗ trợ remote push; dùng development build để nghiệm thu Phần A. Các hướng dẫn Router/Expo Go cũ chỉ mang tính lịch sử, không thay thế tài liệu này.
 
 PHP thuần + PDO + MySQL/MariaDB, giao diện Bootstrap 5, hỗ trợ trình duyệt máy tính và điện thoại.
 

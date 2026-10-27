@@ -1,11 +1,11 @@
-import { useState, useEffect } from 'react';
-import { Room } from '../models/types';
-import { IRoomRepository } from '../repositories/IRoomRepository';
-import { ApiRoomRepository } from '../repositories/ApiRoomRepository';
+import { useState, useEffect } from "react";
+import { Room } from "../models/types";
+import { IRoomRepository } from "../repositories/IRoomRepository";
+import { ApiRoomRepository } from "../repositories/ApiRoomRepository";
 
 const defaultRepo = new ApiRoomRepository();
 
-export type RoomStatusFilter = 'all' | 'rented' | 'empty' | 'maintenance';
+export type RoomStatusFilter = "all" | "rented" | "empty" | "maintenance";
 
 export interface UseRoomsViewModelOptions {
   repository?: IRoomRepository;
@@ -23,7 +23,7 @@ export class RoomsViewModel {
   public refreshing: boolean = false;
   public actionLoading: boolean = false;
   public error: string | null = null;
-  public statusFilter: RoomStatusFilter = 'all';
+  public statusFilter: RoomStatusFilter = "all";
   private listeners: Set<() => void> = new Set();
 
   constructor(repo?: IRoomRepository) {
@@ -40,16 +40,16 @@ export class RoomsViewModel {
   }
 
   get filteredRooms(): Room[] {
-    if (this.statusFilter === 'all') return this.rooms;
+    if (this.statusFilter === "all") return this.rooms;
     return this.rooms.filter((r) => r.status === this.statusFilter);
   }
 
   get stats() {
     return {
       total: this.rooms.length,
-      rented: this.rooms.filter((r) => r.status === 'rented').length,
-      empty: this.rooms.filter((r) => r.status === 'empty').length,
-      maintenance: this.rooms.filter((r) => r.status === 'maintenance').length
+      rented: this.rooms.filter((r) => r.status === "rented").length,
+      empty: this.rooms.filter((r) => r.status === "empty").length,
+      maintenance: this.rooms.filter((r) => r.status === "maintenance").length,
     };
   }
 
@@ -64,7 +64,7 @@ export class RoomsViewModel {
     try {
       this.rooms = await this.repo.getRooms();
     } catch (err: any) {
-      this.error = err.message || 'Không thể tải danh sách phòng trọ';
+      this.error = err.message || "Không thể tải danh sách phòng trọ";
     } finally {
       this.loading = false;
       this.notify();
@@ -78,7 +78,7 @@ export class RoomsViewModel {
     try {
       this.rooms = await this.repo.getRooms();
     } catch (err: any) {
-      this.error = err.message || 'Lỗi khi làm mới dữ liệu';
+      this.error = err.message || "Lỗi khi làm mới dữ liệu";
     } finally {
       this.refreshing = false;
       this.notify();
@@ -90,12 +90,14 @@ export class RoomsViewModel {
     this.notify();
   }
 
-  public async addRoom(roomData: Partial<Room>): Promise<{ success: boolean; message?: string }> {
+  public async addRoom(
+    roomData: Partial<Room>,
+  ): Promise<{ success: boolean; message?: string }> {
     if (!roomData.room_number?.trim()) {
-      return { success: false, message: 'Số phòng không được để trống' };
+      return { success: false, message: "Số phòng không được để trống" };
     }
     if (!roomData.price || roomData.price <= 0) {
-      return { success: false, message: 'Giá thuê phải lớn hơn 0 VNĐ' };
+      return { success: false, message: "Giá thuê phải lớn hơn 0 VNĐ" };
     }
 
     this.actionLoading = true;
@@ -108,7 +110,7 @@ export class RoomsViewModel {
       }
       return res;
     } catch (err: any) {
-      const msg = err.message || 'Lỗi tạo phòng';
+      const msg = err.message || "Lỗi tạo phòng";
       this.error = msg;
       return { success: false, message: msg };
     } finally {
@@ -117,7 +119,19 @@ export class RoomsViewModel {
     }
   }
 
-  public async editRoom(id: number, roomData: Partial<Room>): Promise<{ success: boolean; message?: string }> {
+  public async editRoom(
+    id: number,
+    roomData: Partial<Room>,
+  ): Promise<{ success: boolean; message?: string }> {
+    if (
+      !roomData.room_number?.trim() ||
+      !Number.isFinite(Number(roomData.price)) ||
+      Number(roomData.price) <= 0
+    ) {
+      this.error = "Tên phòng và giá thuê không hợp lệ.";
+      this.notify();
+      return { success: false, message: this.error };
+    }
     this.actionLoading = true;
     this.error = null;
     this.notify();
@@ -128,7 +142,7 @@ export class RoomsViewModel {
       }
       return res;
     } catch (err: any) {
-      const msg = err.message || 'Lỗi cập nhật phòng';
+      const msg = err.message || "Lỗi cập nhật phòng";
       this.error = msg;
       return { success: false, message: msg };
     } finally {
@@ -137,7 +151,9 @@ export class RoomsViewModel {
     }
   }
 
-  public async removeRoom(id: number): Promise<{ success: boolean; message?: string }> {
+  public async removeRoom(
+    id: number,
+  ): Promise<{ success: boolean; message?: string }> {
     this.actionLoading = true;
     this.error = null;
     this.notify();
@@ -148,7 +164,7 @@ export class RoomsViewModel {
       }
       return res;
     } catch (err: any) {
-      const msg = err.message || 'Lỗi xóa phòng';
+      const msg = err.message || "Lỗi xóa phòng";
       this.error = msg;
       return { success: false, message: msg };
     } finally {
@@ -188,6 +204,6 @@ export function useRoomsViewModel(options?: UseRoomsViewModelOptions) {
     refresh: () => vm.refresh(),
     addRoom: (data: Partial<Room>) => vm.addRoom(data),
     editRoom: (id: number, data: Partial<Room>) => vm.editRoom(id, data),
-    removeRoom: (id: number) => vm.removeRoom(id)
+    removeRoom: (id: number) => vm.removeRoom(id),
   };
 }

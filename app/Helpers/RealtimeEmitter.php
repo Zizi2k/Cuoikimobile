@@ -14,7 +14,7 @@ class RealtimeEmitter
 
     private static function getRealtimeSecret(): string
     {
-        return getenv('QLPT_REALTIME_SECRET') ?: 'QLPT-REALTIME-SECRET-2026';
+        return getenv('QLPT_REALTIME_SECRET') ?: '';
     }
 
     /**
@@ -35,6 +35,10 @@ class RealtimeEmitter
 
         $url = self::getRealtimeUrl();
         $secret = self::getRealtimeSecret();
+        if (strlen($secret) < 32) {
+            error_log('Realtime disabled: configure QLPT_REALTIME_SECRET (at least 32 characters).');
+            return false;
+        }
 
         // Use cURL with a low timeout to prevent blocking normal HTTP responses
         if (function_exists('curl_init')) {

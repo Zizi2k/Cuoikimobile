@@ -31,6 +31,11 @@ function handleJoinRoom(socket, requestedRoom, callback) {
     return;
   }
 
+  if (typeof requestedRoom !== 'string' || requestedRoom.length > 80) {
+    if (typeof callback === 'function') callback({ success: false, message: 'Invalid room' });
+    return;
+  }
+
   // Admin can join any operational room
   if (user.role === 'admin') {
     socket.join(requestedRoom);

@@ -25,9 +25,9 @@ Run lint and typecheck before declaring any task done.
 
 ## Navigation & Routing
 
-- Use **Expo Router** for all navigation. Routes live in `src/app/` — every file there is a screen, `_layout.tsx` files define navigators. Keep non-route code (components, hooks, utils) outside `src/app/`.
-- Import `Link`, `router`, and `useLocalSearchParams` from `expo-router`.
-- Docs: https://docs.expo.dev/router/introduction.md
+- The course rubric explicitly requires React Navigation. Use `@react-navigation/native`, native-stack and bottom-tabs in `src/navigation/AppNavigator.tsx`.
+- Entry is `index.ts` -> `App.tsx`. Do not recreate Expo Router routes or change `main` to expo-router/entry.
+- Keep Views in `src/views`, injected business logic in `src/viewmodels`, and API/storage implementations behind repository interfaces.
 
 ## Building with EAS
 

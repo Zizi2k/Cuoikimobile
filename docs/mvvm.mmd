@@ -1,0 +1,8 @@
+flowchart TD
+  V[View và React Navigation] --> VM[ViewModel]
+  VM --> I[Repository interfaces]
+  I --> API[API repositories]
+  I --> MOCK[Mock repositories]
+  API --> S[API storage socket services]
+  S --> BE[PHP REST và Socket.IO]
+  BE --> DB[(MySQL)]

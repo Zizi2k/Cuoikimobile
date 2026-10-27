@@ -43,29 +43,13 @@ function verifyToken(token) {
     return { valid: false, error: 'Invalid token signature' };
   }
 
-  const bits = payloadStr.split('.');
-  let userId = 0;
-  let role = 'tenant';
-  let expiresAt = 0;
-
-  if (bits.length === 3) {
-    userId = parseInt(bits[0], 10);
-    role = bits[1];
-    expiresAt = parseInt(bits[2], 10);
-  } else if (bits.length === 2) {
-    userId = parseInt(bits[0], 10);
-    expiresAt = parseInt(bits[1], 10);
-  } else {
-    return { valid: false, error: 'Invalid payload content' };
-  }
-
-  if (isNaN(userId) || userId <= 0) {
-    return { valid: false, error: 'Invalid user id in token' };
-  }
-
-  const now = Math.floor(Date.now() / 1000);
-  if (expiresAt < now) {
-    return { valid: false, error: 'Token has expired' };
+  const bits = /^([1-9][0-9]*)\.(admin|tenant)\.([0-9]+)$/.exec(payloadStr);
+  if (!bits) return { valid: false, error: 'Invalid payload content' };
+  const userId = Number(bits[1]);
+  const role = bits[2];
+  const expiresAt = Number(bits[3]);
+  if (!Number.isSafeInteger(userId) || !Number.isSafeInteger(expiresAt) || expiresAt <= Math.floor(Date.now() / 1000)) {
+    return { valid: false, error: 'Invalid user id or token expiry' };
   }
 
   return {
@@ -80,7 +64,7 @@ function verifyToken(token) {
 /**
  * Socket.IO authentication middleware for handshake
  */
-function authMiddleware(socket, next) {
+async function authMiddleware(socket, next) {
   const token =
     socket.handshake.auth?.token ||
     socket.handshake.headers?.authorization ||
@@ -95,8 +79,20 @@ function authMiddleware(socket, next) {
     return next(new Error(`Authentication failed: ${result.error}`));
   }
 
-  socket.user = result.user;
-  next();
+  // Check account status and current role with PHP, not only the signed token.
+  try {
+    const response = await fetch(config.API_BASE + 'session', {
+      headers: { Authorization: `Bearer ${token}` }, signal: AbortSignal.timeout(8000)
+    });
+    const data = await response.json();
+    if (!response.ok || !data.success || Number(data.user?.id) !== result.user.id || data.user?.role !== result.user.role) {
+      return next(new Error('Account disabled, expired or role changed'));
+    }
+    socket.authToken = token.replace(/^Bearer\s+/i, '').trim();
+    socket.user = result.user;
+    next();
+  } catch { next(new Error('Cannot verify account with PHP API')); }
+
 }
 
 module.exports = {

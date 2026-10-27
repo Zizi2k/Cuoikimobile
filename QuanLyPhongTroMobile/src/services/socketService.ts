@@ -1,99 +1,85 @@
-import { io, Socket } from 'socket.io-client';
-
-export type SocketStatus = 'connected' | 'connecting' | 'disconnected';
-
+import { io, Socket } from "socket.io-client";
+import { emitEvent } from "./events";
+export type SocketStatus = "connected" | "connecting" | "disconnected";
 let socket: Socket | null = null;
-let currentStatus: SocketStatus = 'disconnected';
-const statusListeners = new Set<(status: SocketStatus) => void>();
-
-function notifyStatus(status: SocketStatus) {
-  currentStatus = status;
-  statusListeners.forEach((fn) => fn(status));
+let status: SocketStatus = "disconnected";
+const listeners = new Set<(value: SocketStatus) => void>();
+function update(value: SocketStatus) {
+  status = value;
+  listeners.forEach((fn) => fn(value));
+  emitEvent("socket");
 }
-
-/**
- * Initialize and connect to Socket.IO realtime server.
- */
-export function connectSocket(serverUrl: string, token: string): Socket {
-  if (socket) {
-    socket.disconnect();
-    socket = null;
-  }
-
-  notifyStatus('connecting');
-
-  const cleanToken = (token || '').trim();
-  console.log(`[SocketService] Connecting to ${serverUrl} with WebSocket transport...`);
-
-  socket = io(serverUrl, {
-    auth: { token: cleanToken },
-    query: { token: cleanToken },
-    extraHeaders: {
-      Authorization: `Bearer ${cleanToken}`
-    },
-    transports: ['websocket'],
-    upgrade: false,
-    forceNew: true,
+export function connectSocket(url: string, token: string): Socket {
+  disconnectSocket();
+  update("connecting");
+  const current = io(url, {
+    auth: { token },
     reconnection: true,
-    reconnectionAttempts: 30,
-    reconnectionDelay: 1500,
+    reconnectionDelay: 1000,
     reconnectionDelayMax: 5000,
-    timeout: 15000,
-    autoConnect: true
+    timeout: 12000,
   });
-
-  socket.on('connect', () => {
-    console.log('[SocketService] Connected successfully! Socket ID:', socket?.id);
-    notifyStatus('connected');
+  socket = current;
+  current.on("connect", () => {
+    update("connected");
+    emitEvent("data");
   });
-
-  socket.on('reconnect', (attempt) => {
-    console.log(`[SocketService] Reconnected on attempt #${attempt}`);
-    notifyStatus('connected');
-  });
-
-  socket.on('disconnect', (reason) => {
-    console.log('[SocketService] Disconnected:', reason);
-    notifyStatus('disconnected');
-  });
-
-  socket.on('connect_error', (error) => {
-    console.warn('[SocketService] Connection error:', error.message);
-    notifyStatus('disconnected');
-  });
-
-  socket.on('reconnect_attempt', () => {
-    notifyStatus('connecting');
-  });
-
-  return socket;
+  current.on("disconnect", () => update("disconnected"));
+  current.on("connect_error", () => update("disconnected"));
+  current.io.on("reconnect_attempt", () => update("connecting"));
+  current.on("incident:created", () => emitEvent("data"));
+  current.on("incident:status:changed", () => emitEvent("data"));
+  current.on("notification:created", () => emitEvent("data"));
+  return current;
 }
-
-/**
- * Listen for socket connection status changes.
- */
-export function onSocketStatusChange(listener: (status: SocketStatus) => void): () => void {
-  statusListeners.add(listener);
-  listener(currentStatus);
-  return () => {
-    statusListeners.delete(listener);
-  };
-}
-
-/**
- * Get current socket instance.
- */
 export function getSocket(): Socket | null {
   return socket;
 }
-
-/**
- * Disconnect socket on logout or app teardown.
- */
+export function getSocketStatus(): SocketStatus {
+  return status;
+}
+export function onSocketStatusChange(
+  fn: (value: SocketStatus) => void,
+): () => void {
+  listeners.add(fn);
+  fn(status);
+  return () => {
+    listeners.delete(fn);
+  };
+}
 export function disconnectSocket(): void {
   if (socket) {
+    socket.removeAllListeners();
+    socket.io.removeAllListeners();
     socket.disconnect();
     socket = null;
   }
-  notifyStatus('disconnected');
+  update("disconnected");
+}
+export async function socketCommand<T>(
+  event: string,
+  body: unknown,
+): Promise<T> {
+  const current = socket;
+  if (!current?.connected)
+    throw new Error(
+      "Realtime chưa kết nối. Vui lòng đợi kết nối lại hoặc chọn chế độ REST.",
+    );
+  return new Promise((resolve, reject) =>
+    current
+      .timeout(15000)
+      .emit(event, body, (error: Error | null, response: any) => {
+        if (error)
+          reject(
+            new Error(
+              "Chưa xác nhận kết quả realtime. Tải lại danh sách trước khi gửi lại để tránh trùng.",
+            ),
+          );
+        else if (!response?.success)
+          reject(
+            new Error(response?.message || "Không thực hiện được thao tác."),
+          );
+        else resolve(response as T);
+      }),
+  );
 }

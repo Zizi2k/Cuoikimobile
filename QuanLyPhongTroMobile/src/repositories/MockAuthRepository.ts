@@ -1,5 +1,5 @@
-import { IAuthRepository } from './IAuthRepository';
-import { User } from '../models/types';
+import { IAuthRepository } from "./IAuthRepository";
+import { User } from "../models/types";
 
 export class MockAuthRepository implements IAuthRepository {
   public savedToken: string | null = null;
@@ -8,36 +8,47 @@ export class MockAuthRepository implements IAuthRepository {
   public mockUsers: User[] = [
     {
       id: 1,
-      username: 'admin',
-      fullname: 'Chủ Nhà Trọ An Bình',
-      role: 'admin',
-      status: 1
+      username: "admin",
+      fullname: "Chủ Nhà Trọ An Bình",
+      role: "admin",
+      status: 1,
     },
     {
       id: 2,
-      username: '0912345678',
-      fullname: 'Nguyễn Văn An',
-      phone: '0912345678',
-      role: 'tenant',
+      username: "0912345678",
+      fullname: "Nguyễn Văn An",
+      phone: "0912345678",
+      role: "tenant",
       tenant_id: 1,
-      status: 1
-    }
+      status: 1,
+    },
   ];
 
   public shouldFail = false;
-  public errorMessage = 'Lỗi xác thực giả lập';
+  public errorMessage = "Lỗi xác thực giả lập";
 
-  async login(phoneOrUsername: string, password: string): Promise<{ token: string; user: User }> {
+  async login(
+    phoneOrUsername: string,
+    password: string,
+  ): Promise<{ token: string; user: User }> {
     if (this.shouldFail) throw new Error(this.errorMessage);
-    const user = this.mockUsers.find((u) => u.username === phoneOrUsername || u.phone === phoneOrUsername);
-    if (!user) throw new Error('Số điện thoại/tài khoản hoặc mật khẩu không chính xác.');
+    const user = this.mockUsers.find(
+      (u) => u.username === phoneOrUsername || u.phone === phoneOrUsername,
+    );
+    if (!user)
+      throw new Error("Số điện thoại/tài khoản hoặc mật khẩu không chính xác.");
 
     const token = `mock_token_${user.id}_${Date.now()}`;
     await this.saveSession(token, user);
     return { token, user };
   }
 
-  async register(fullname: string, phone: string, password: string, idCard?: string): Promise<{ token: string; user: User }> {
+  async register(
+    fullname: string,
+    phone: string,
+    password: string,
+    idCard?: string,
+  ): Promise<{ token: string; user: User }> {
     if (this.shouldFail) throw new Error(this.errorMessage);
     const newId = this.mockUsers.length + 1;
     const user: User = {
@@ -45,9 +56,9 @@ export class MockAuthRepository implements IAuthRepository {
       username: phone,
       fullname,
       phone,
-      role: 'tenant',
+      role: "tenant",
       tenant_id: newId,
-      status: 1
+      status: 1,
     };
     this.mockUsers.push(user);
     const token = `mock_token_${newId}_${Date.now()}`;
@@ -55,7 +66,10 @@ export class MockAuthRepository implements IAuthRepository {
     return { token, user };
   }
 
-  async getSavedSession(): Promise<{ token: string | null; user: User | null }> {
+  async getSavedSession(): Promise<{
+    token: string | null;
+    user: User | null;
+  }> {
     return { token: this.savedToken, user: this.savedUser };
   }
 
@@ -71,6 +85,6 @@ export class MockAuthRepository implements IAuthRepository {
 
   async verifySession(token: string): Promise<boolean> {
     if (this.shouldFail) return false;
-    return !!token && token.startsWith('mock_token_');
+    return !!token && token.startsWith("mock_token_");
   }
 }

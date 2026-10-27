@@ -1,7 +1,7 @@
-import { useState, useCallback, useEffect } from 'react';
-import { User } from '../models/types';
-import { IAuthRepository } from '../repositories/IAuthRepository';
-import { ApiAuthRepository } from '../repositories/ApiAuthRepository';
+import { useState, useCallback, useEffect } from "react";
+import { User } from "../models/types";
+import { IAuthRepository } from "../repositories/IAuthRepository";
+import { ApiAuthRepository } from "../repositories/ApiAuthRepository";
 
 const defaultRepo = new ApiAuthRepository();
 
@@ -39,7 +39,7 @@ export function useAuthViewModel(options?: UseAuthViewModelOptions) {
         }
       }
     } catch (err: any) {
-      console.warn('Session restoration failed:', err);
+      console.warn("Session restoration failed:", err);
     } finally {
       setIsRestoring(false);
     }
@@ -47,14 +47,17 @@ export function useAuthViewModel(options?: UseAuthViewModelOptions) {
 
   useEffect(() => {
     if (autoRestore) {
-      restoreSession();
+      const timer = setTimeout(() => {
+        void restoreSession();
+      }, 0);
+      return () => clearTimeout(timer);
     }
   }, [autoRestore, restoreSession]);
 
   const login = useCallback(
     async (phoneOrUsername: string, password: string): Promise<boolean> => {
       if (!phoneOrUsername.trim() || !password.trim()) {
-        setError('Vui lòng nhập đầy đủ tài khoản và mật khẩu');
+        setError("Vui lòng nhập đầy đủ tài khoản và mật khẩu");
         return false;
       }
 
@@ -66,37 +69,47 @@ export function useAuthViewModel(options?: UseAuthViewModelOptions) {
         setUser(res.user);
         return true;
       } catch (err: any) {
-        setError(err.message || 'Đăng nhập không thành công');
+        setError(err.message || "Đăng nhập không thành công");
         return false;
       } finally {
         setLoading(false);
       }
     },
-    [repo]
+    [repo],
   );
 
   const register = useCallback(
-    async (fullname: string, phone: string, password: string, idCard?: string): Promise<boolean> => {
+    async (
+      fullname: string,
+      phone: string,
+      password: string,
+      idCard?: string,
+    ): Promise<boolean> => {
       if (!fullname.trim() || !phone.trim() || !password.trim()) {
-        setError('Vui lòng điền họ tên, số điện thoại và mật khẩu');
+        setError("Vui lòng điền họ tên, số điện thoại và mật khẩu");
         return false;
       }
 
       setLoading(true);
       setError(null);
       try {
-        const res = await repo.register(fullname.trim(), phone.trim(), password, idCard?.trim());
+        const res = await repo.register(
+          fullname.trim(),
+          phone.trim(),
+          password,
+          idCard?.trim(),
+        );
         setToken(res.token);
         setUser(res.user);
         return true;
       } catch (err: any) {
-        setError(err.message || 'Đăng ký tài khoản không thành công');
+        setError(err.message || "Đăng ký tài khoản không thành công");
         return false;
       } finally {
         setLoading(false);
       }
     },
-    [repo]
+    [repo],
   );
 
   const logout = useCallback(async () => {
@@ -115,8 +128,8 @@ export function useAuthViewModel(options?: UseAuthViewModelOptions) {
     user,
     token,
     role: user?.role || null,
-    isAdmin: user?.role === 'admin',
-    isTenant: user?.role === 'tenant',
+    isAdmin: user?.role === "admin",
+    isTenant: user?.role === "tenant",
     isAuthenticated: !!token && !!user,
     isRestoring,
     loading,
@@ -124,6 +137,6 @@ export function useAuthViewModel(options?: UseAuthViewModelOptions) {
     login,
     register,
     logout,
-    restoreSession
+    restoreSession,
   };
 }

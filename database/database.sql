@@ -13,6 +13,8 @@ SET FOREIGN_KEY_CHECKS = 0;
 -- --------------------------------------------------------
 -- 1. Bảng users (Tài khoản người dùng: Admin và Người thuê)
 -- --------------------------------------------------------
+DROP TABLE IF EXISTS `push_deliveries`;
+DROP TABLE IF EXISTS `notification_reads`;
 DROP TABLE IF EXISTS `users`;
 CREATE TABLE `users` (
   `id` INT AUTO_INCREMENT PRIMARY KEY,
@@ -364,6 +366,30 @@ CREATE TABLE `payment_reminder_logs` (
   CONSTRAINT `fk_reminder_invoice` FOREIGN KEY (`invoice_id`) REFERENCES `invoices` (`id`) ON DELETE CASCADE
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
+-- Per-user read receipts. Idempotent and non-destructive.
+-- Legacy notifications.is_read is deliberately NOT copied: broadcast readers are unknown.
+CREATE TABLE IF NOT EXISTS `notification_reads` (
+  `notification_id` INT NOT NULL,
+  `user_id` INT NOT NULL,
+  `read_at` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  PRIMARY KEY (`notification_id`, `user_id`),
+  INDEX `idx_notification_reads_user` (`user_id`),
+  CONSTRAINT `fk_notification_reads_notification` FOREIGN KEY (`notification_id`) REFERENCES `notifications` (`id`) ON DELETE CASCADE,
+  CONSTRAINT `fk_notification_reads_user` FOREIGN KEY (`user_id`) REFERENCES `users` (`id`) ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+CREATE TABLE IF NOT EXISTS push_deliveries (
+ id INT AUTO_INCREMENT PRIMARY KEY,
+ notification_id INT DEFAULT NULL,
+ token_hash CHAR(64) NOT NULL,
+ expo_ticket_id VARCHAR(255) DEFAULT NULL,
+ status VARCHAR(30) NOT NULL,
+ message VARCHAR(255) DEFAULT NULL,
+ created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+ checked_at DATETIME DEFAULT NULL,
+ INDEX idx_push_receipt (status, created_at)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
 SET FOREIGN_KEY_CHECKS = 1;
 
 
@@ -450,8 +476,8 @@ INSERT INTO `invoice_details` (`invoice_id`, `item_name`, `quantity`, `unit`, `u
 
 -- Lịch sử thanh toán
 INSERT INTO `payments` (`id`, `payment_code`, `invoice_id`, `payment_date`, `amount`, `payment_method`, `transaction_ref`, `notes`, `created_by`) VALUES
-(1, 'TT-202610-001', 1, '2026-10-02 09:30:00', 3932500.00, 'bank_transfer', 'MBBANK-FT260902991', 'Chuyển khoản qua App Ngân hàng MB', 1),
-(2, 'TT-202610-002', 3, '2026-10-11 14:15:00', 2000000.00, 'cash', 'TM-P102-DOT1', 'Thanh toán tiền mặt đợt 1', 1);
+(1, 'TT-202610-001', 1, '2026-10-02 09:30:00', 3932500.00, 'bank_transfer', 'MBBANK-FT260902991', 'Chuyển khoản qua App Ngân hàng MB', NULL),
+(2, 'TT-202610-002', 3, '2026-10-11 14:15:00', 2000000.00, 'cash', 'TM-P102-DOT1', 'Thanh toán tiền mặt đợt 1', NULL);
 
 -- Yêu cầu bảo trì / sửa chữa
 INSERT INTO `maintenance_requests` (`id`, `request_code`, `room_id`, `tenant_id`, `title`, `description`, `priority`, `status`, `admin_notes`, `cost`) VALUES
@@ -460,13 +486,13 @@ INSERT INTO `maintenance_requests` (`id`, `request_code`, `room_id`, `tenant_id`
 
 -- Thông báo
 INSERT INTO `notifications` (`id`, `title`, `content`, `type`, `target_tenant_id`, `created_by`, `created_at`) VALUES
-(1, 'Lịch tổng vệ sinh bể nước ngầm và diệt côn trùng định kỳ', 'Ban quản lý nhà trọ xin thông báo: Vào ngày Chủ Nhật tới (18/10), khu trọ sẽ tiến hành súc rửa bể chứa nước sinh hoạt từ 8h00 đến 11h30. Quý khách vui lòng dự trữ nước sinh hoạt trước thời gian trên.', 'general', NULL, 1, '2026-10-12 08:00:00'),
-(2, 'Nhắc nhở đóng tiền phòng tháng 10/2026', 'Hệ thống đã phát hành hóa đơn tiền phòng và dịch vụ tháng 10/2026. Quý khách vui lòng kiểm tra mục Hóa đơn trên ứng dụng và hoàn tất thanh toán trước ngày 20/10.', 'payment', NULL, 1, '2026-10-12 10:00:00');
+(1, 'Lịch tổng vệ sinh bể nước ngầm và diệt côn trùng định kỳ', 'Ban quản lý nhà trọ xin thông báo: Vào ngày Chủ Nhật tới (18/10), khu trọ sẽ tiến hành súc rửa bể chứa nước sinh hoạt từ 8h00 đến 11h30. Quý khách vui lòng dự trữ nước sinh hoạt trước thời gian trên.', 'general', NULL, NULL, '2026-10-12 08:00:00'),
+(2, 'Nhắc nhở đóng tiền phòng tháng 10/2026', 'Hệ thống đã phát hành hóa đơn tiền phòng và dịch vụ tháng 10/2026. Quý khách vui lòng kiểm tra mục Hóa đơn trên ứng dụng và hoàn tất thanh toán trước ngày 20/10.', 'payment', NULL, NULL, '2026-10-12 10:00:00');
 
 -- Chi phí vận hành
 INSERT INTO `expenses` (`id`, `expense_code`, `title`, `category`, `amount`, `expense_date`, `recipient`, `description`, `created_by`) VALUES
-(1, 'CP-202610-001', 'Bảo dưỡng và thay lọc nước tổng khu trọ Q7', 'Bảo trì', 650000.00, '2026-10-05', 'Công ty Môi Trường Xanh', 'Thay 3 lõi lọc thô đầu nguồn', 1),
-(2, 'CP-202610-002', 'Vệ sinh và thu gom rác tháng 09/2026', 'Vệ sinh', 400000.00, '2026-10-01', 'Đội vệ sinh đô thị', 'Thanh toán tiền rác định kỳ hàng tháng', 1);
+(1, 'CP-202610-001', 'Bảo dưỡng và thay lọc nước tổng khu trọ Q7', 'Bảo trì', 650000.00, '2026-10-05', 'Công ty Môi Trường Xanh', 'Thay 3 lõi lọc thô đầu nguồn', NULL),
+(2, 'CP-202610-002', 'Vệ sinh và thu gom rác tháng 09/2026', 'Vệ sinh', 400000.00, '2026-10-01', 'Đội vệ sinh đô thị', 'Thanh toán tiền rác định kỳ hàng tháng', NULL);
 
 -- Cài đặt hệ thống
 INSERT INTO `system_settings` (`setting_key`, `setting_value`, `description`) VALUES

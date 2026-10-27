@@ -1,11 +1,11 @@
-import { useState, useEffect } from 'react';
-import { NotificationItem, NotificationPreferences } from '../models/types';
-import { INotificationRepository } from '../repositories/INotificationRepository';
-import { ApiNotificationRepository } from '../repositories/ApiNotificationRepository';
+import { useState, useEffect } from "react";
+import { NotificationItem, NotificationPreferences } from "../models/types";
+import { INotificationRepository } from "../repositories/INotificationRepository";
+import { ApiNotificationRepository } from "../repositories/ApiNotificationRepository";
 
 const defaultRepo = new ApiNotificationRepository();
 
-export type NotificationFilter = 'all' | 'unread';
+export type NotificationFilter = "all" | "unread";
 
 export interface UseNotificationsViewModelOptions {
   repository?: INotificationRepository;
@@ -22,16 +22,20 @@ export class NotificationsViewModel {
   public loading: boolean = false;
   public refreshing: boolean = false;
   public error: string | null = null;
-  public filter: NotificationFilter = 'all';
+  public filter: NotificationFilter = "all";
   public preferences: NotificationPreferences = {
     invoice: true,
     payment: true,
     maintenance: true,
-    reminder: true
+    reminder: true,
   };
+  public reminderMessage = "";
   private listeners: Set<() => void> = new Set();
 
-  constructor(repo?: INotificationRepository) {
+  constructor(
+    repo?: INotificationRepository,
+    private schedule?: () => Promise<string | null>,
+  ) {
     this.repo = repo || defaultRepo;
   }
 
@@ -45,7 +49,7 @@ export class NotificationsViewModel {
   }
 
   get filteredNotifications(): NotificationItem[] {
-    if (this.filter === 'unread') {
+    if (this.filter === "unread") {
       return this.notifications.filter((n) => n.is_read === 0);
     }
     return this.notifications;
@@ -64,7 +68,7 @@ export class NotificationsViewModel {
       this.notifications = data.items;
       this.unreadCount = data.unreadCount;
     } catch (err: any) {
-      this.error = err.message || 'Không thể tải lịch sử thông báo';
+      this.error = err.message || "Không thể tải lịch sử thông báo";
     } finally {
       this.loading = false;
       this.notify();
@@ -80,7 +84,7 @@ export class NotificationsViewModel {
       this.notifications = data.items;
       this.unreadCount = data.unreadCount;
     } catch (err: any) {
-      this.error = err.message || 'Lỗi khi làm mới thông báo';
+      this.error = err.message || "Lỗi khi làm mới thông báo";
     } finally {
       this.refreshing = false;
       this.notify();
@@ -103,18 +107,23 @@ export class NotificationsViewModel {
     if (item.is_read === 1) return true;
 
     // Optimistic update
-    this.notifications = this.notifications.map((n) => (n.id === item.id ? { ...n, is_read: 1 } : n));
+    this.notifications = this.notifications.map((n) =>
+      n.id === item.id ? { ...n, is_read: 1 } : n,
+    );
     this.unreadCount = Math.max(0, this.unreadCount - 1);
     this.notify();
 
     try {
-      await this.repo.markAsRead(item.id);
+      if (!(await this.repo.markAsRead(item.id)))
+        throw new Error("Không thể đánh dấu đã đọc.");
       return true;
     } catch (err: any) {
       // Rollback on failure
-      this.notifications = this.notifications.map((n) => (n.id === item.id ? { ...n, is_read: 0 } : n));
+      this.notifications = this.notifications.map((n) =>
+        n.id === item.id ? { ...n, is_read: 0 } : n,
+      );
       this.unreadCount += 1;
-      this.error = err.message || 'Không thể đánh dấu thông báo đã đọc';
+      this.error = err.message || "Không thể đánh dấu thông báo đã đọc";
       this.notify();
       return false;
     }
@@ -130,23 +139,28 @@ export class NotificationsViewModel {
     this.notify();
 
     try {
-      await this.repo.markAllAsRead();
+      if (!(await this.repo.markAllAsRead()))
+        throw new Error("Không lưu được trạng thái đọc.");
       return true;
     } catch (err: any) {
       // Rollback
       this.notifications = previous;
       this.unreadCount = previousUnread;
-      this.error = err.message || 'Không thể đánh dấu tất cả thông báo';
+      this.error = err.message || "Không thể đánh dấu tất cả thông báo";
       this.notify();
       return false;
     }
   }
 
-  public async updatePreference(category: keyof NotificationPreferences, isEnabled: boolean): Promise<boolean> {
+  public async updatePreference(
+    category: keyof NotificationPreferences,
+    isEnabled: boolean,
+  ): Promise<boolean> {
     this.preferences = { ...this.preferences, [category]: isEnabled };
     this.notify();
     try {
-      await this.repo.savePreference(category, isEnabled);
+      if (!(await this.repo.savePreference(category, isEnabled)))
+        throw new Error("Không lưu được tùy chọn.");
       return true;
     } catch {
       this.preferences = { ...this.preferences, [category]: !isEnabled };
@@ -155,11 +169,32 @@ export class NotificationsViewModel {
     }
   }
 
-  public async registerToken(token: string, deviceType = 'mobile', deviceId?: string): Promise<void> {
+  public async remind(): Promise<void> {
+    this.reminderMessage = "";
+    this.error = null;
+    try {
+      const id = await this.schedule?.();
+      this.reminderMessage = id
+        ? "Đã lên lịch thông báo sau 60 giây."
+        : "Chức năng này cần development build có quyền thông báo.";
+    } catch (error) {
+      this.error =
+        error instanceof Error
+          ? error.message
+          : "Không lên lịch được thông báo.";
+    }
+    this.notify();
+  }
+
+  public async registerToken(
+    token: string,
+    deviceType = "mobile",
+    deviceId?: string,
+  ): Promise<void> {
     try {
       await this.repo.savePushToken(token, deviceType, deviceId);
     } catch (e) {
-      console.warn('Failed to save push token via repository:', e);
+      console.warn("Failed to save push token via repository:", e);
     }
   }
 
@@ -167,7 +202,7 @@ export class NotificationsViewModel {
     try {
       await this.repo.removePushToken(token);
     } catch (e) {
-      console.warn('Failed to remove push token via repository:', e);
+      console.warn("Failed to remove push token via repository:", e);
     }
   }
 }
@@ -175,7 +210,9 @@ export class NotificationsViewModel {
 /**
  * Custom hook wrapping NotificationsViewModel for React Native components.
  */
-export function useNotificationsViewModel(options?: UseNotificationsViewModelOptions) {
+export function useNotificationsViewModel(
+  options?: UseNotificationsViewModelOptions,
+) {
   const [vm] = useState(() => new NotificationsViewModel(options?.repository));
   const [, setTick] = useState(0);
 
@@ -203,8 +240,10 @@ export function useNotificationsViewModel(options?: UseNotificationsViewModelOpt
     refresh: () => vm.refresh(),
     markAsRead: (item: NotificationItem) => vm.markAsRead(item),
     markAllAsRead: () => vm.markAllAsRead(),
-    updatePreference: (cat: keyof NotificationPreferences, enabled: boolean) => vm.updatePreference(cat, enabled),
-    registerToken: (token: string, type?: string, devId?: string) => vm.registerToken(token, type, devId),
-    unregisterToken: (token: string) => vm.unregisterToken(token)
+    updatePreference: (cat: keyof NotificationPreferences, enabled: boolean) =>
+      vm.updatePreference(cat, enabled),
+    registerToken: (token: string, type?: string, devId?: string) =>
+      vm.registerToken(token, type, devId),
+    unregisterToken: (token: string) => vm.unregisterToken(token),
   };
 }

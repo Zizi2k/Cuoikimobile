@@ -61,13 +61,6 @@ try {
     foreach ($invoices as $inv) {
         $userId = $inv['user_id'] ? (int)$inv['user_id'] : null;
 
-        // If user_id is missing on tenant profile, try to resolve via users table by phone
-        if (!$userId && !empty($inv['tenant_phone'])) {
-            $stmtUser = $pdo->prepare("SELECT id FROM users WHERE phone = ? LIMIT 1");
-            $stmtUser->execute([$inv['tenant_phone']]);
-            $userId = $stmtUser->fetchColumn() ?: null;
-        }
-
         if (!$userId) {
             echo "Invoice #{$inv['invoice_code']}: Tenant has no user account linked. Skipping push.\n";
             $skippedCount++;

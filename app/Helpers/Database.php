@@ -44,16 +44,7 @@ class Database
                     "[" . date('Y-m-d H:i:s') . "] Lỗi kết nối CSDL: " . $e->getMessage() . PHP_EOL,
                     FILE_APPEND
                 );
-                die("<div style='font-family: Arial, sans-serif; padding: 20px; background: #fff3cd; color: #856404; border: 1px solid #ffeeba; border-radius: 6px; max-width: 650px; margin: 40px auto;'>"
-                    . "<h3 style='margin-top:0;'>⚠️ Lỗi kết nối Cơ sở dữ liệu MySQL</h3>"
-                    . "<p>Hệ thống không thể kết nối tới MySQL. Vui lòng kiểm tra lại:</p>"
-                    . "<ul>"
-                    . "<li>WAMP64 đã bật và biểu tượng có màu xanh lá.</li>"
-                    . "<li>Dịch vụ MySQL (cổng 3306) đang hoạt động.</li>"
-                    . "<li>Đã import file <code>database/database.sql</code> vào database <code>quanlyphongtro</code>.</li>"
-                    . "<li>Kiểm tra cấu hình tài khoản trong <code>config/database.php</code>.</li>"
-                    . "</ul>"
-                    . "</div>");
+                throw new \RuntimeException('Không kết nối được cơ sở dữ liệu.', 0, $e);
             }
         }
 

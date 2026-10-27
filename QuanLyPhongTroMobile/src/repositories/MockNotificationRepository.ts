@@ -1,40 +1,44 @@
-import { INotificationRepository } from './INotificationRepository';
-import { NotificationItem, NotificationPreferences } from '../models/types';
+import { INotificationRepository } from "./INotificationRepository";
+import { NotificationItem, NotificationPreferences } from "../models/types";
 
 export class MockNotificationRepository implements INotificationRepository {
   public notifications: NotificationItem[] = [
     {
       id: 1,
-      title: 'Hóa đơn tháng mới',
-      content: 'Bạn có hóa đơn tiền phòng kỳ 2026-10 với số tiền 3.090.000 đ',
-      type: 'payment',
+      title: "Hóa đơn tháng mới",
+      content: "Bạn có hóa đơn tiền phòng kỳ 2026-10 với số tiền 3.090.000 đ",
+      type: "payment",
       is_read: 0,
-      reference_type: 'invoice',
+      reference_type: "invoice",
       reference_id: 1,
-      created_at: '2026-10-23 10:00:00'
+      created_at: "2026-10-23 10:00:00",
     },
     {
       id: 2,
-      title: 'Bảo trì hệ thống nước',
-      content: 'Ban quản lý sẽ tạm ngắt nước từ 13h-15h chiều nay để bảo dưỡng định kỳ.',
-      type: 'general',
+      title: "Bảo trì hệ thống nước",
+      content:
+        "Ban quản lý sẽ tạm ngắt nước từ 13h-15h chiều nay để bảo dưỡng định kỳ.",
+      type: "general",
       is_read: 1,
-      created_at: '2026-10-22 09:30:00'
-    }
+      created_at: "2026-10-22 09:30:00",
+    },
   ];
 
   public preferences: NotificationPreferences = {
     invoice: true,
     payment: true,
     maintenance: true,
-    reminder: true
+    reminder: true,
   };
 
   public registeredTokens: string[] = [];
   public shouldFail = false;
-  public errorMessage = 'Lỗi máy chủ thông báo giả lập';
+  public errorMessage = "Lỗi máy chủ thông báo giả lập";
 
-  async getNotifications(): Promise<{ items: NotificationItem[]; unreadCount: number }> {
+  async getNotifications(): Promise<{
+    items: NotificationItem[];
+    unreadCount: number;
+  }> {
     if (this.shouldFail) throw new Error(this.errorMessage);
     const unread = this.notifications.filter((n) => n.is_read === 0).length;
     return { items: [...this.notifications], unreadCount: unread };

@@ -4,7 +4,8 @@
   "description": "Realtime Socket.IO service for QuanLyPhongTro",
   "main": "src/server.js",
   "scripts": {
-    "start": "node src/server.js"
+    "start": "node src/server.js",
+    "test": "node --test test/*.test.js"
   },
   "dependencies": {
     "cors": "^2.8.5",

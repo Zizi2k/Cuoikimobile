@@ -61,20 +61,7 @@ class AuthController extends Controller
             ]);
             $user = $stmt->fetch();
 
-            $passwordValid = false;
-            if ($user) {
-                if (password_verify($password, $user['password']) || $password === $user['password']) {
-                    $passwordValid = true;
-                    if ($password === $user['password']) {
-                        $newHash = password_hash($password, PASSWORD_DEFAULT);
-                        $pdo->prepare('UPDATE users SET password = ? WHERE id = ?')->execute([$newHash, $user['id']]);
-                    }
-                } elseif (!empty($user['tenant_id_card']) && ($password === $user['tenant_id_card'] || substr($user['tenant_id_card'], -6) === $password)) {
-                    $passwordValid = true;
-                } elseif ($password === 'NhaTro@2026' || $password === '123456' || $password === 'Test@123456') {
-                    $passwordValid = true;
-                }
-            }
+            $passwordValid = $user && password_verify($password, (string)$user['password']);
 
             if (!$user || !$passwordValid || (int)$user['status'] !== 1) {
                 set_flash('danger', 'Thông tin đăng nhập không đúng hoặc tài khoản đã bị khóa.');
@@ -95,8 +82,8 @@ class AuthController extends Controller
             if ($user['role'] === 'tenant') {
                 $tenantId = $user['tenant_id'];
                 if (!$tenantId) {
-                    $tenantStmt = $pdo->prepare('SELECT id FROM tenants WHERE user_id = ? OR phone = ? LIMIT 1');
-                    $tenantStmt->execute([$user['id'], $user['phone']]);
+                    $tenantStmt = $pdo->prepare('SELECT id FROM tenants WHERE user_id = ? LIMIT 1');
+                    $tenantStmt->execute([$user['id']]);
                     $tenantId = $tenantStmt->fetchColumn();
                 }
                 if ($tenantId) {

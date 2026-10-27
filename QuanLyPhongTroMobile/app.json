@@ -8,7 +8,8 @@
     "scheme": "quanlyphongtromobile",
     "userInterfaceStyle": "automatic",
     "ios": {
-      "icon": "./assets/expo.icon"
+      "icon": "./assets/expo.icon",
+      "bundleIdentifier": "com.quanlyphongtro.mobile"
     },
     "android": {
       "package": "com.quanlyphongtro.mobile",
@@ -26,7 +27,6 @@
       "favicon": "./assets/images/favicon.png"
     },
     "plugins": [
-      "expo-router",
       [
         "expo-splash-screen",
         {
@@ -44,8 +44,7 @@
       ]
     ],
     "experiments": {
-      "typedRoutes": true,
-      "reactCompiler": true
+      "reactCompiler": false
     }
   }
 }

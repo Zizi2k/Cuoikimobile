@@ -1,34 +1,11 @@
-# Dịch vụ Realtime Socket.IO - Quản Lý Nhà Trọ
+# Socket.IO server
 
-Dịch vụ Node.js + Socket.IO độc lập phục vụ trao đổi dữ liệu hai chiều tức thời (Realtime) giữa ứng dụng di động React Native và hệ thống backend PHP WAMP.
+Node.js 22+, Socket.IO 4. `npm ci`, `npm test`, `npm start`.
 
-## Cấu trúc thư mục
+Biến môi trường bắt buộc: `QLPT_API_SECRET` và `QLPT_REALTIME_SECRET`, mỗi giá trị tối thiểu 32 bytes, khác nhau, giống phía PHP. `QLPT_API_URL` trỏ API PHP, `HOST` mặc định 0.0.0.0, `PORT` mặc định 3001.
 
-```text
-realtime-server/
-├── src/
-│   ├── server.js        # Điểm khởi chạy Express + Socket.IO
-│   ├── auth/            # Xác thực handshake token bằng HMAC-SHA256
-│   ├── sockets/         # Đăng ký sự kiện socket & lắng nghe kết nối
-│   ├── rooms/           # Quản lý và phân quyền Room
-│   └── config/          # Cấu hình cổng, secret và CORS
-├── package.json
-└── README.md
-```
+Handshake xác minh token với PHP `/api/session`. Client dùng `auth: { token }`. Server tự gán room `user_<id>` và role. Không nhận user_id do client khai để phân quyền.
 
-## Các cổng và biến môi trường
+Hai command nghiệp vụ có ACK: `incident:create`, `incident:updateStatus`; chúng gọi API PHP bằng token phiên thật. PHP lưu dữ liệu và phát webhook có internal secret tới `/api/emit`; client nhận `incident:created`, `incident:status:changed`, `notification:created` theo room. Timeout ACK không đảm bảo thao tác chưa ghi dữ liệu, cần kiểm tra danh sách trước khi gửi lại.
 
-- Cổng mặc định: `3001`
-- Biến môi trường:
-  - `PORT`: Cổng dịch vụ (mặc định 3001)
-  - `HOST`: 0.0.0.0
-  - `QLPT_API_SECRET`: Khóa bí mật dùng để xác thực Bearer token được cấp bởi PHP
-  - `QLPT_REALTIME_SECRET`: Khóa bí mật nội bộ để PHP gửi webhook sang Node.js (`POST /api/emit`)
-
-## Khởi chạy dịch vụ
-
-```bash
-cd realtime-server
-npm install
-npm start
-```
+Xem [hướng dẫn đầy đủ](../docs/11_HOAN_THIEN_TIEU_CHI.md) để cấu hình PHP, chạy integration và demo nhiều thiết bị.

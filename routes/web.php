@@ -199,3 +199,12 @@ $router->post('/api/notifications/preferences', [MobileApiController::class, 'sa
 $router->post('/api/reminders/run', [MobileApiController::class, 'runReminders']);
 
 
+
+// Session identity and scoped detail routes for navigation / Socket.IO handshake.
+$router->get('/api/session', [MobileApiController::class, 'session']);
+$router->get('/api/invoices/{id}', [MobileApiController::class, 'invoiceDetail']);
+$router->get('/api/maintenance/{id}', [MobileApiController::class, 'maintenanceDetail']);
+$router->get('/api/manage/{resource}', [MobileApiController::class, 'manage']);
+$router->post('/api/manage/{resource}', [MobileApiController::class, 'manage']);
+$router->put('/api/manage/{resource}/{id}', [MobileApiController::class, 'manage']);
+$router->delete('/api/manage/{resource}/{id}', [MobileApiController::class, 'manage']);
