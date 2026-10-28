@@ -1,8 +1,5 @@
-import React, { useState } from "react";
-import { FlatList, Modal, Switch, View } from "react-native";
-import { useNavigation } from "@react-navigation/native";
-import { NativeStackNavigationProp } from "@react-navigation/native-stack";
-import { RootParams } from "../../navigation/types";
+import React, { useEffect, useState } from "react";
+import { FlatList, Modal, Pressable, Switch, View } from "react-native";
 import { MaintenanceRequest } from "../../models/types";
 import { useMaintenanceModel } from "../../viewmodels/useScreenModels";
 import { useSession } from "../../context/AuthContext";
@@ -21,7 +18,6 @@ import {
 export default function MaintenanceScreen() {
   const vm = useMaintenanceModel();
   const session = useSession();
-  const nav = useNavigation<NativeStackNavigationProp<RootParams>>();
   const admin = session.user?.role === "admin";
   const [title, setTitle] = useState("");
   const [description, setDescription] = useState("");
@@ -30,6 +26,21 @@ export default function MaintenanceScreen() {
   const [status, setStatus] = useState("in_progress");
   const [notes, setNotes] = useState("");
   const [cost, setCost] = useState("0");
+
+  useEffect(() => {
+    if (!editing) return;
+    setStatus(editing.status || "in_progress");
+    setNotes(editing.admin_notes || "");
+    setCost(String(editing.cost ?? 0));
+  }, [editing]);
+
+  const openEditor = (item: MaintenanceRequest) => {
+    if (!admin) return;
+    vm.error = "";
+    vm.message = "";
+    setEditing(item);
+  };
+
   return (
     <View style={ui.shell}>
       <FlatList
@@ -96,34 +107,18 @@ export default function MaintenanceScreen() {
         }
         ListEmptyComponent={<State empty={!vm.error} />}
         renderItem={({ item }) => (
-          <Card>
-            <Title>{item.title}</Title>
-            <Info>
-              {item.room_number || item.room_code} · {item.tenant_name}
-            </Info>
-            <Info>
-              {labels[item.status]} · {item.description}
-            </Info>
-            <Info>{item.admin_notes}</Info>
-            <Button
-              title="Xem chi tiết"
-              onPress={() =>
-                nav.navigate("IncidentDetail", { id: Number(item.id) })
-              }
-            />
-            {admin && (
-              <Button
-                title="Cập nhật trạng thái"
-                disabled={vm.busy}
-                onPress={() => {
-                  setEditing(item);
-                  setStatus(item.status);
-                  setNotes(item.admin_notes || "");
-                  setCost(String(item.cost ?? 0));
-                }}
-              />
-            )}
-          </Card>
+          <Pressable onPress={() => openEditor(item)} disabled={!admin}>
+            <Card>
+              <Title>{item.title}</Title>
+              <Info>
+                {item.room_number || item.room_code} · {item.tenant_name}
+              </Info>
+              <Info>
+                {labels[item.status]} · {item.description}
+              </Info>
+              <Info>{item.admin_notes}</Info>
+            </Card>
+          </Pressable>
         )}
       />
       <Modal
@@ -153,6 +148,19 @@ export default function MaintenanceScreen() {
                   });
             }}
           />
+          {admin && (
+            <Button
+              title="Xóa sự cố"
+              danger
+              disabled={vm.busy}
+              onPress={() => {
+                if (editing)
+                  void vm.remove(editing.id).then((ok) => {
+                    if (ok) setEditing(null);
+                  });
+              }}
+            />
+          )}
           <Button title="Đóng" onPress={() => setEditing(null)} />
         </Page>
       </Modal>

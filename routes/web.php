@@ -178,6 +178,8 @@ $router->post('/api/payments', [MobileApiController::class, 'recordPayment']);
 $router->get('/api/maintenance', [MobileApiController::class, 'maintenance']);
 $router->post('/api/maintenance', [MobileApiController::class, 'maintenance']);
 $router->post('/api/maintenance/update', [MobileApiController::class, 'updateMaintenanceStatus']);
+$router->post('/api/maintenance/delete', [MobileApiController::class, 'deleteMaintenance']);
+$router->post('/api/maintenance/delete/{id}', [MobileApiController::class, 'deleteMaintenance']);
 $router->post('/api/maintenance/{id}/status', [MobileApiController::class, 'updateMaintenanceStatus']);
 
 // Quản lý Push Token thiết bị

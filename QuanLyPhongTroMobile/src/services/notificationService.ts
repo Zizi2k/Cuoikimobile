@@ -33,7 +33,7 @@ async function permissions(native: Module): Promise<boolean> {
     await native.setNotificationChannelAsync("default", {
       name: "Phòng trọ",
       importance: native.AndroidImportance.HIGH,
-      sound: "default",
+      // sound: "default",
     });
   const existing = await native.getPermissionsAsync();
   return (

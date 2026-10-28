@@ -9,6 +9,7 @@ test("incident validation prevents empty requests, then uses selected realtime t
     find: jest.fn(),
     create: jest.fn().mockResolvedValue(undefined),
     update: jest.fn().mockResolvedValue(undefined),
+    remove: jest.fn().mockResolvedValue(undefined),
   };
   const vm = new MaintenanceViewModel(repo);
   expect(
@@ -35,6 +36,7 @@ test("incident errors stop loading and retain an actionable error", async () => 
     find: jest.fn(),
     create: jest.fn(),
     update: jest.fn(),
+    remove: jest.fn(),
   });
   await vm.load();
   expect(vm.loading).toBe(false);

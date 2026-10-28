@@ -21,7 +21,7 @@
                 } ?>
             </span>
         </div>
-        <span class="text-muted small">Phòng <?= e($request['room_code']) ?> &bull; Người báo: <?= e($request['tenant_name']) ?> &bull; <?= format_datetime($request['created_at']) ?></span>
+        <span class="text-muted small">Phòng <?= e($request['room_code']) ?> &bull; <?= e($request['tenant_name']) ?> &bull; <?= format_datetime($request['created_at']) ?></span>
     </div>
     <a href="<?= url('/maintenance') ?>" class="btn btn-outline-secondary btn-sm">
         <i class="bi bi-arrow-left"></i> Danh Sách
@@ -60,7 +60,7 @@
             <div class="card-body p-0">
                 <ul class="list-group list-group-flush small">
                     <li class="list-group-item d-flex justify-content-between py-2">
-                        <span class="text-muted">Người báo:</span>
+                        <span class="text-muted">Khách thuê:</span>
                         <span class="fw-bold"><?= e($request['tenant_name']) ?></span>
                     </li>
                     <li class="list-group-item d-flex justify-content-between py-2">

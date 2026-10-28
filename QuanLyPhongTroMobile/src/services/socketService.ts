@@ -70,11 +70,7 @@ export async function socketCommand<T>(
       .timeout(15000)
       .emit(event, body, (error: Error | null, response: any) => {
         if (error)
-          reject(
-            new Error(
-              "Chưa xác nhận kết quả realtime. Tải lại danh sách trước khi gửi lại để tránh trùng.",
-            ),
-          );
+          reject(new Error("Không nhận được xác nhận từ hệ thống realtime."));
         else if (!response?.success)
           reject(
             new Error(response?.message || "Không thực hiện được thao tác."),

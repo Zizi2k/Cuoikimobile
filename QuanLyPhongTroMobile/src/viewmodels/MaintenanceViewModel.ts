@@ -55,6 +55,9 @@ export class MaintenanceViewModel extends ObservableModel {
     }
     return this.action(() => this.repository.update(id, data, this.realtime));
   }
+  async remove(id: number): Promise<boolean> {
+    return this.action(() => this.repository.remove(id, this.realtime));
+  }
   private async action(work: () => Promise<void>): Promise<boolean> {
     if (this.busy) return false;
     this.busy = true;

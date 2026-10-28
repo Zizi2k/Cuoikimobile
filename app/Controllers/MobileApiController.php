@@ -1028,6 +1028,38 @@ class MobileApiController
     }
 
     /**
+     * Delete maintenance request (Admin only)
+     * POST /api/maintenance/delete or /api/maintenance/delete/{id}
+     */
+    public function deleteMaintenance(int|string|null $id = null): void
+    {
+        $u = $this->authorize('admin');
+        $data = $this->input();
+        $reqId = (int)($id ?? ($data['id'] ?? 0));
+
+        if (!$reqId) {
+            $this->respond(['success' => false, 'message' => 'Thiếu ID yêu cầu bảo trì.'], 422);
+        }
+
+        $pdo = Database::getConnection();
+        $stmt = $pdo->prepare("SELECT id FROM maintenance_requests WHERE id = ? LIMIT 1");
+        $stmt->execute([$reqId]);
+
+        if (!$stmt->fetch()) {
+            $this->respond(['success' => false, 'message' => 'Không tìm thấy yêu cầu sửa chữa.'], 404);
+        }
+
+        $deleteStmt = $pdo->prepare("DELETE FROM maintenance_requests WHERE id = ?");
+        $deleteStmt->execute([$reqId]);
+
+        $this->respond([
+            'success' => true,
+            'message' => 'Đã xóa sự cố thành công.',
+            'id' => $reqId
+        ]);
+    }
+
+    /**
      * Save push notification token
      * POST /api/push-token
      */

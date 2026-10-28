@@ -10,7 +10,7 @@ return [
     'port'      => getenv('DB_PORT') ?: '3306',
     'database'  => getenv('DB_NAME') ?: 'quanlyphongtro',
     'username'  => getenv('DB_USER') ?: 'root',
-    'password'  => getenv('DB_PASS') !== false ? getenv('DB_PASS') : '',
+    'password'  => getenv('DB_PASS') !== false ? getenv('DB_PASS') : '123456',
     'charset'   => 'utf8mb4',
     'collation' => 'utf8mb4_unicode_ci',
     'options'   => [

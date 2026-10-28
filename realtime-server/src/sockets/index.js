@@ -26,6 +26,16 @@ function registerSocketHandlers(io) {
     });
     command('incident:create', 'tenant', 'maintenance');
     command('incident:updateStatus', 'admin', 'maintenance/update');
+    socket.on('incident:delete', async (input, callback) => {
+      if (typeof callback !== 'function') return;
+      if (socket.user.role !== 'admin') return callback({ success: false, message: 'Không có quyền thực hiện thao tác.' });
+      const id = Number(input?.id ?? 0);
+      if (!Number.isFinite(id) || id <= 0) return callback({ success: false, message: 'Thiếu ID yêu cầu bảo trì.' });
+      try {
+        const result = await requestBackend(socket.authToken, `maintenance/delete/${id}`, 'POST');
+        callback(result);
+      } catch (error) { callback({ success: false, message: error.message || 'Máy chủ chưa xác nhận kết quả. Hãy tải lại trước khi gửi lại.' }); }
+    });
     socket.on('ping:check', (callback) => { if (typeof callback === 'function') callback({ status: 'ok' }); });
   });
 }

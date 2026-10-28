@@ -24,4 +24,17 @@ export class ApiMaintenanceRepository implements IMaintenanceRepository {
     if (realtime) await socketCommand("incident:updateStatus", { ...data, id });
     else await apiClient("maintenance/update", "POST", { ...data, id });
   }
+
+  async remove(id: number, realtime: boolean): Promise<void> {
+    if (realtime) {
+      try {
+        await socketCommand("incident:delete", { id });
+        return;
+      } catch (error) {
+        await apiClient(`maintenance/delete/${id}`, "POST");
+        return;
+      }
+    }
+    await apiClient(`maintenance/delete/${id}`, "POST");
+  }
 }

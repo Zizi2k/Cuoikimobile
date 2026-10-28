@@ -8,4 +8,5 @@ export interface IMaintenanceRepository {
     data: Record<string, unknown>,
     realtime: boolean,
   ): Promise<void>;
+  remove(id: number, realtime: boolean): Promise<void>;
 }

@@ -102,34 +102,6 @@ export default function HomeScreen() {
                   )}
                 </View>
               </View>
-              <Text style={s.blockTitle}>🛠️ Sự cố cần tiếp nhận gần đây</Text>
-              {(d.maintenance || []).map((item: any) => (
-                <Pressable
-                  key={item.id}
-                  accessibilityRole="button"
-                  style={s.itemRowCard}
-                  onPress={() =>
-                    nav.navigate("IncidentDetail", { id: Number(item.id) })
-                  }
-                >
-                  <View style={{ flex: 1 }}>
-                    <Text style={s.itemRowTitle}>
-                      [{item.room_number || item.room_code || "Phòng"}]{" "}
-                      {item.title}
-                    </Text>
-                    <Text style={s.itemRowMuted}>
-                      Người báo: {item.tenant_name}
-                    </Text>
-                    <Text style={s.itemRowSub}>{item.description}</Text>
-                  </View>
-                  <View style={[s.badge, s.badgeOrange]}>
-                    <Text style={s.badgeText}>
-                      {labels[item.status] || item.status}
-                    </Text>
-                  </View>
-                </Pressable>
-              ))}
-              {!d.maintenance?.length && <Info>Chưa có sự cố cần xử lý.</Info>}
             </>
           ) : (
             <>
